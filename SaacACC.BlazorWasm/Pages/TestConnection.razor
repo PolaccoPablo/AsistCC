@@ -1,0 +1,145 @@
+﻿@page "/test"
+@using System.Net.Http.Json
+@using SaasACC.Shared.DTOs
+@inject HttpClient Http
+
+<PageTitle>Test de Conexión API</PageTitle>
+
+<h1>Test de Conexión con la API</h1>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="TestApiConnection">
+        Probar Conexión API
+    </button>
+
+    <button class="btn btn-success ms-2" @onclick="LoadClientes">
+        Cargar Clientes
+    </button>
+</div>
+
+@if (loading)
+{
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Cargando...</span>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info">
+        <strong>Respuesta de la API:</strong><br />
+        @message
+    </div>
+}
+
+@if (clientes != null && clientes.Any())
+{
+    <div class="mt-4">
+        <h3>Lista de Clientes</h3>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Saldo</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var cliente in clientes)
+                    {
+                        <tr>
+                            <td>@cliente.Id</td>
+                            <td>@cliente.Nombre</td>
+                            <td class="@(cliente.Saldo >= 0 ? "text-success" : "text-danger")">
+                                @cliente.SaldoFormateado
+                            </td>
+                            <td>
+                                <span class="badge @(cliente.Saldo >= 0 ? "bg-success" : "bg-danger")">
+                                    @cliente.EstadoSaldo
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger mt-3">
+        <strong>Error:</strong><br />
+        @error
+    </div>
+}
+
+@code {
+    private string message = string.Empty;
+    private string error = string.Empty;
+    private bool loading = false;
+    private List<ClienteDto>? clientes;
+
+    private async Task TestApiConnection()
+    {
+        loading = true;
+        error = string.Empty;
+        message = string.Empty;
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<dynamic>("api/test");
+            if (response != null)
+            {
+                message = $"✅ Conexión exitosa!\nMensaje: {response.GetProperty("message")}\nFecha: {response.GetProperty("timestamp")}";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"❌ Error de conexión: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadClientes()
+    {
+        loading = true;
+        error = string.Empty;
+        clientes = null;
+
+        try
+        {
+            var response = await Http.GetAsync("api/test/clientes");
+            if (response.IsSuccessStatusCode)
+            {
+                var clientesData = await response.Content.ReadFromJsonAsync<dynamic[]>();
+                if (clientesData != null)
+                {
+                    clientes = clientesData.Select(c => new ClienteDto
+                    {
+                        Id = c.GetProperty("id").GetInt32(),
+                        Nombre = c.GetProperty("nombre").GetString() ?? "",
+                        Saldo = c.GetProperty("saldo").GetDecimal()
+                    }).ToList();
+                }
+            }
+            else
+            {
+                error = $"Error HTTP: {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"❌ Error al cargar clientes: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}
