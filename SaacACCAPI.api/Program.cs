@@ -1,6 +1,16 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using SaasACC.Infrastructure.Data;
+
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Agregar después de var builder = WebApplication.CreateBuilder(args);
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlServer(connectionString));
 
 // Add services to the container.
 
