@@ -13,8 +13,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Saac.Model\SaacACC.Model.csproj" />
-    <ProjectReference Include="..\SaacACC.Domain\SaacACC.Domain.csproj" />
+    <ProjectReference Include="..\Saas.Model\SaasACC.Model.csproj" />
+    <ProjectReference Include="..\SaasACC.Domain\SaasACC.Domain.csproj" />
   </ItemGroup>
 
 </Project>

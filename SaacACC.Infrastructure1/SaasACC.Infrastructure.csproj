@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SaacACC.Domain\SaacACC.Domain.csproj" />
+    <ProjectReference Include="..\SaasACC.Domain\SaasACC.Domain.csproj" />
   </ItemGroup>
 
 </Project>

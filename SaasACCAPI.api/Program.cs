@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
-using SaasACC.Infrastructure.Data;
-
+using SaasACC.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 

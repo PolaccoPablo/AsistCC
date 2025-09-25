@@ -1,7 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SaasACC.Domain.Entities;
 
-namespace SaasACC.Infrastructure.Data;
+namespace SaasACC.Infrastructure;
 
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
@@ -10,6 +10,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Cliente> Clientes { get; set; }
     public DbSet<CuentaCorriente> CuentasCorrientes { get; set; }
     public DbSet<Movimiento> Movimientos { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=SaasACCDb;Trusted_Connection=true;TrustServerCertificate=true;");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

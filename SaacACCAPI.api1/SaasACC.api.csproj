@@ -12,9 +12,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Saac.Model\SaacACC.Model.csproj" />
-    <ProjectReference Include="..\SaacACC.Application\SaacACC.Application.csproj" />
-    <ProjectReference Include="..\SaacACC.Infrastructure\SaacACC.Infrastructure.csproj" />
+    <ProjectReference Include="..\Saas.Model\SaasACC.Model.csproj" />
+    <ProjectReference Include="..\SaasACC.Application\SaasACC.Application.csproj" />
+    <ProjectReference Include="..\SaasACC.Infrastructure\SaasACC.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
