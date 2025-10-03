@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Saas.Model\SaasACC.Model.csproj" />
+    <ProjectReference Include="..\SaasACC.Model\SaasACC.Model.csproj" />
     <ProjectReference Include="..\SaasACC.Application\SaasACC.Application.csproj" />
     <ProjectReference Include="..\SaasACC.Infrastructure\SaasACC.Infrastructure.csproj" />
   </ItemGroup>

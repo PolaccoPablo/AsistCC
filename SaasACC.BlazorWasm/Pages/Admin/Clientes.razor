@@ -1,0 +1,187 @@
+﻿@page "/admin/clientes"
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IAuthService AuthService
+
+<MudText Typo="Typo.h4" Class="mb-4">Gestión de Clientes</MudText>
+
+<MudCard>
+    <MudCardContent>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="searchString" 
+                             Placeholder="Buscar cliente..." 
+                             Adornment="Adornment.Start" 
+                             AdornmentIcon="@Icons.Material.Filled.Search" 
+                             IconSize="Size.Medium" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex justify-end">
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary" 
+                          StartIcon="@Icons.Material.Filled.Add"
+                          OnClick="OpenCreateDialog">
+                    Nuevo Cliente
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+        
+        <MudTable Items="@filteredClientes" 
+                  Dense="true" 
+                  Hover="true" 
+                  Class="mt-4"
+                  Loading="@loading"
+                  LoadingProgressColor="Color.Info">
+            <HeaderContent>
+                <MudTh>Nombre</MudTh>
+                <MudTh>Email</MudTh>
+                <MudTh>Teléfono</MudTh>
+                <MudTh>DNI</MudTh>
+                <MudTh>Saldo</MudTh>
+                <MudTh>Acciones</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Nombre">@context.NombreCompleto</MudTd>
+                <MudTd DataLabel="Email">@context.Email</MudTd>
+                <MudTd DataLabel="Teléfono">@context.Telefono</MudTd>
+                <MudTd DataLabel="DNI">@context.DNI</MudTd>
+                <MudTd DataLabel="Saldo">
+                    <MudChip Color="@(GetSaldoColor(context.CuentaCorriente?.Saldo ?? 0))" 
+                             Size="Size.Small">
+                        $@((context.CuentaCorriente?.Saldo ?? 0).ToString("N2"))
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Acciones">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                   Size="Size.Small"
+                                   OnClick="@(() => OpenEditDialog(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Receipt" 
+                                   Size="Size.Small"
+                                   Color="Color.Info"
+                                   OnClick="@(() => VerCuentaCorriente(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                   Size="Size.Small"
+                                   Color="Color.Error"
+                                   OnClick="@(() => DeleteCliente(context))" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No se encontraron clientes</MudText>
+            </NoRecordsContent>
+            <LoadingContent>
+                <MudText>Cargando clientes...</MudText>
+            </LoadingContent>
+        </MudTable>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private List<ClienteDto> clientes = new();
+    private List<ClienteDto> filteredClientes = new();
+    private string searchString = "";
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClientes();
+    }
+
+    private async Task LoadClientes()
+    {
+        loading = true;
+        try
+        {
+            var comercioId = await AuthService.GetComercioId();
+            clientes = await Http.GetFromJsonAsync<List<ClienteDto>>($"api/clientes/comercio/{comercioId}") ?? new();
+            FilterClientes();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar clientes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void FilterClientes()
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+        {
+            filteredClientes = clientes;
+        }
+        else
+        {
+            filteredClientes = clientes.Where(c => 
+                c.Nombre.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
+                c.Apellido.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
+                c.Email.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
+                c.DNI?.Contains(searchString, StringComparison.OrdinalIgnoreCase) == true
+            ).ToList();
+        }
+    }
+
+    private Color GetSaldoColor(decimal saldo)
+    {
+        return saldo >= 0 ? Color.Success : Color.Error;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<ClienteFormDialog>("Nuevo Cliente");
+        var result = await dialog.Result;
+        
+        if (!result.Canceled)
+        {
+            await LoadClientes();
+        }
+    }
+
+    private async Task OpenEditDialog(ClienteDto cliente)
+    {
+        var parameters = new DialogParameters<ClienteFormDialog> 
+        { 
+            { x => x.Cliente, cliente } 
+        };
+        
+        var dialog = await DialogService.ShowAsync<ClienteFormDialog>("Editar Cliente", parameters);
+        var result = await dialog.Result;
+        
+        if (!result.Canceled)
+        {
+            await LoadClientes();
+        }
+    }
+
+    private async Task DeleteCliente(ClienteDto cliente)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Eliminar Cliente",
+            $"¿Está seguro de que desea eliminar a {cliente.NombreCompleto}?",
+            yesText: "Eliminar", cancelText: "Cancelar");
+            
+        if (result == true)
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/clientes/{cliente.Id}");
+                if (response.IsSuccessStatusCode)
+                {
+                    Snackbar.Add("Cliente eliminado correctamente", Severity.Success);
+                    await LoadClientes();
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error al eliminar: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private void VerCuentaCorriente(ClienteDto cliente)
+    {
+        Navigation.NavigateTo($"/cuentacorriente/{cliente.Id}");
+    }
+}
