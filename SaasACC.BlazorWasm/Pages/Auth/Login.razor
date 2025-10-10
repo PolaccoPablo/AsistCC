@@ -1,0 +1,100 @@
+﻿@page "/login"
+@using MudBlazor
+@using SaacACC.BlazorWasm.Services
+@using SaasACC.BlazorWasm.Layout
+@layout EmptyLayout
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center" Style="height: 100vh;">
+    <MudPaper Class="pa-8 mx-auto" Elevation="3" Style="width: 100%;">
+        <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-6">
+            SaaS Cuentas Corrientes
+        </MudText>
+        
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudTextField @bind-Value="loginModel.Email" 
+                         Label="Email" 
+                         Variant="Variant.Outlined"
+                         Required="true" 
+                         RequiredError="El email es requerido"
+                         InputType="InputType.Email"
+                         Class="mb-4" />
+                         
+            <MudTextField @bind-Value="loginModel.Password" 
+                         Label="Contraseña" 
+                         Variant="Variant.Outlined"
+                         InputType="@passwordInputType"
+                         Required="true" 
+                         RequiredError="La contraseña es requerida"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@passwordInputIcon"
+                         OnAdornmentClick="TogglePasswordVisibility"
+                         Class="mb-6" />
+            
+            <MudButton Variant="Variant.Filled" 
+                      Color="Color.Primary" 
+                      FullWidth="true"
+                      OnClick="HandleLogin"
+                      Disabled="@loading"
+                      Class="py-2">
+                @if (loading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Iniciar Sesión
+            </MudButton>
+        </MudForm>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm form = null!;
+    private LoginRequest loginModel = new();
+    private bool success;
+    private bool loading;
+    
+    private InputType passwordInputType = InputType.Password;
+    private string passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+
+    void TogglePasswordVisibility()
+    {
+        if (passwordInputType == InputType.Password)
+        {
+            passwordInputType = InputType.Text;
+            passwordInputIcon = Icons.Material.Filled.Visibility;
+        }
+        else
+        {
+            passwordInputType = InputType.Password;
+            passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        loading = true;
+        
+        var result = await AuthService.Login(loginModel);
+        
+        if (result.Success)
+        {
+            Snackbar.Add("Inicio de sesión exitoso", Severity.Success);
+            
+            // Redirigir según el rol
+            Navigation.NavigateTo(result.Role switch
+            {
+                "SuperAdmin" => "/superadmin/comercios",
+                "Admin" => "/admin/clientes",
+                _ => "/cuentas"
+            });
+        }
+        else
+        {
+            Snackbar.Add(result.ErrorMessage, Severity.Error);
+        }
+        
+        loading = false;
+    }
+}

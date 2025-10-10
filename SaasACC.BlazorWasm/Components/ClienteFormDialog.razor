@@ -1,0 +1,138 @@
+@using MudBlazor
+@using SaasACC.Shared.DTOs
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@IsValid" @bind-Errors="@errors" Model="@Cliente">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Cliente.Nombre"
+                                  For="@(() => Cliente.Nombre)"
+                                  Label="Nombre"
+                                  Required="true"
+                                  RequiredError="El nombre es obligatorio"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Cliente.Apellido"
+                                  For="@(() => Cliente.Apellido)"
+                                  Label="Apellido"
+                                  Required="true"
+                                  RequiredError="El apellido es obligatorio"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Cliente.Email"
+                                  For="@(() => Cliente.Email)"
+                                  Label="Email"
+                                  Required="true"
+                                  RequiredError="El email es obligatorio"
+                                  Variant="Variant.Outlined"
+                                  InputType="InputType.Email" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Cliente.Telefono"
+                                  For="@(() => Cliente.Telefono)"
+                                  Label="Teléfono"
+                                  Variant="Variant.Outlined"
+                                  InputType="InputType.Telephone" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="Cliente.DNI"
+                                  For="@(() => Cliente.DNI)"
+                                  Label="DNI"
+                                  Required="true"
+                                  RequiredError="El DNI es obligatorio"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" 
+                   Variant="Variant.Filled" 
+                   OnClick="Save"
+                   Disabled="@(!IsValid || saving)">
+            @if (saving)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Guardando...</MudText>
+            }
+            else
+            {
+                @(Cliente.Id == 0 ? "Crear" : "Actualizar")
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    
+    [Parameter] public ClienteDto Cliente { get; set; } = new();
+
+    private MudForm form = null!;
+    private bool IsValid = false;
+    private string[] errors = { };
+    private bool saving = false;
+
+    protected override void OnInitialized()
+    {
+        if (Cliente.Id == 0)
+        {
+            // Nuevo cliente - inicializar valores por defecto
+            Cliente = new ClienteDto();
+        }
+    }
+
+    private async Task Save()
+    {
+        if (!IsValid) return;
+
+        saving = true;
+        try
+        {
+            // Generar nombre completo
+            Cliente.NombreCompleto = $"{Cliente.Nombre} {Cliente.Apellido}".Trim();
+
+            HttpResponseMessage response;
+            if (Cliente.Id == 0)
+            {
+                // Crear nuevo cliente
+                response = await Http.PostAsJsonAsync("api/clientes", Cliente);
+            }
+            else
+            {
+                // Actualizar cliente existente
+                response = await Http.PutAsJsonAsync($"api/clientes/{Cliente.Id}", Cliente);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Cliente.Id == 0 ? "Cliente creado correctamente" : "Cliente actualizado correctamente", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(Cliente));
+            }
+            else
+            {
+                var errorMessage = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Error al guardar: {errorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al guardar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

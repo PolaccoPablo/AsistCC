@@ -1,0 +1,43 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using SaacACC.BlazorWasm.Services
+@inject IAuthService AuthService
+
+<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">
+        Inicio
+    </MudNavLink>
+    
+    <AuthorizeView Roles="SuperAdmin">
+        <MudNavGroup Title="Super Admin" Icon="@Icons.Material.Filled.SupervisorAccount" Expanded="true">
+            <MudNavLink Href="/superadmin/comercios" Icon="@Icons.Material.Filled.Business">
+                Comercios
+            </MudNavLink>
+        </MudNavGroup>
+    </AuthorizeView>
+    
+    <AuthorizeView Roles="Admin,SuperAdmin">
+        <MudNavGroup Title="Administración" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="true">
+            <MudNavLink Href="/admin/clientes" Icon="@Icons.Material.Filled.People">
+                Clientes
+            </MudNavLink>
+            <MudNavLink Href="/admin/usuarios" Icon="@Icons.Material.Filled.Person">
+                Usuarios
+            </MudNavLink>
+        </MudNavGroup>
+    </AuthorizeView>
+    
+    <AuthorizeView Roles="Usuario,Admin,SuperAdmin">
+        <MudNavGroup Title="Operaciones" Icon="@Icons.Material.Filled.Receipt" Expanded="true">
+            <MudNavLink Href="/cuentas" Icon="@Icons.Material.Filled.AccountBalance">
+                Cuentas Corrientes
+            </MudNavLink>
+            <MudNavLink Href="/movimientos" Icon="@Icons.Material.Filled.SwapHoriz">
+                Movimientos
+            </MudNavLink>
+            <MudNavLink Href="/reportes" Icon="@Icons.Material.Filled.Assessment">
+                Reportes
+            </MudNavLink>
+        </MudNavGroup>
+    </AuthorizeView>
+</MudNavMenu>

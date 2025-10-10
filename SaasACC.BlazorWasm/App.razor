@@ -1,0 +1,50 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using SaasACC.BlazorWasm.Layout
+
+<CascadingAuthenticationState>
+    <MudThemeProvider Theme="@_theme" />
+    <MudDialogProvider />
+    <MudSnackbarProvider />
+    
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                <NotAuthorized>
+                    <RedirectToLogin />
+                </NotAuthorized>
+                <Authorizing>
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                </Authorizing>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>No encontrado</PageTitle>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <MudContainer>
+                    <MudText Typo="Typo.h4">Página no encontrada</MudText>
+                    <MudText>Lo sentimos, no pudimos encontrar la página que buscas.</MudText>
+                </MudContainer>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>
+
+@code {
+    private MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = Colors.Blue.Darken2,
+            Secondary = Colors.Green.Accent4,
+            AppbarBackground = Colors.Blue.Darken3,
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = Colors.Blue.Lighten1,
+            Secondary = Colors.Green.Accent3,
+            AppbarBackground = Colors.Blue.Darken4,
+        }
+    };
+}
