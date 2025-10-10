@@ -1,4 +1,7 @@
-﻿@inject IAuthService AuthService
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using SaacACC.BlazorWasm.Services
+@inject IAuthService AuthService
 
 <MudNavMenu>
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">

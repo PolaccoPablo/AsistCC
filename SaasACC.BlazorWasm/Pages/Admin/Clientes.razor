@@ -1,9 +1,15 @@
 ﻿@page "/admin/clientes"
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@using SaacACC.BlazorWasm.Services
+@using SaasACC.Shared.DTOs
+@using SaasACC.BlazorWasm.Components
 @attribute [Authorize(Roles = "Admin,SuperAdmin")]
 @inject HttpClient Http
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IAuthService AuthService
+@inject NavigationManager Navigation
 
 <MudText Typo="Typo.h4" Class="mb-4">Gestión de Clientes</MudText>
 
@@ -47,7 +53,7 @@
                 <MudTd DataLabel="Teléfono">@context.Telefono</MudTd>
                 <MudTd DataLabel="DNI">@context.DNI</MudTd>
                 <MudTd DataLabel="Saldo">
-                    <MudChip Color="@(GetSaldoColor(context.CuentaCorriente?.Saldo ?? 0))" 
+                    <MudChip T="int" Color="@(GetSaldoColor(context.CuentaCorriente?.Saldo ?? 0))" 
                              Size="Size.Small">
                         $@((context.CuentaCorriente?.Saldo ?? 0).ToString("N2"))
                     </MudChip>

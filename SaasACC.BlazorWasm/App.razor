@@ -1,4 +1,6 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using SaasACC.BlazorWasm.Layout
 
 <CascadingAuthenticationState>
     <MudThemeProvider Theme="@_theme" />
@@ -32,11 +34,17 @@
 @code {
     private MudTheme _theme = new()
     {
-        Palette = new PaletteLight()
+        PaletteLight = new PaletteLight()
         {
             Primary = Colors.Blue.Darken2,
             Secondary = Colors.Green.Accent4,
             AppbarBackground = Colors.Blue.Darken3,
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = Colors.Blue.Lighten1,
+            Secondary = Colors.Green.Accent3,
+            AppbarBackground = Colors.Blue.Darken4,
         }
     };
 }
