@@ -1,5 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using SaasACC.Domain.Entities;
+using SaasACC.Model.Entities;
 
 namespace SaasACC.Infrastructure;
 
