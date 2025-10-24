@@ -3,6 +3,7 @@ using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Net;
 using SaasACC.Infrastructure;
 using SaasACC.Application.Interfaces;
 using SaasACC.Application.Services;
@@ -87,7 +88,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowBlazorWasm",
         policy =>
         {
-            policy.WithOrigins("https://localhost:7001", "http://localhost:5001") // Puertos por defecto de Blazor
+            policy.WithOrigins("https://localhost:7163", "http://localhost:5298") // Puertos del frontend Blazor
                   .AllowAnyMethod()
                   .AllowAnyHeader()
                   .AllowCredentials();
@@ -95,6 +96,13 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Configurar para desarrollo - permitir certificados SSL no válidos
+if (app.Environment.IsDevelopment())
+{
+    ServicePointManager.ServerCertificateValidationCallback = 
+        (sender, certificate, chain, sslPolicyErrors) => true;
+}
 
 // Inicializar base de datos con datos de prueba
 await DbInitializer.InitializeAsync(app.Services);
