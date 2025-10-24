@@ -1,4 +1,4 @@
-﻿namespace SaasACC.Domain.Entities;
+namespace SaasACC.Model.Entities;
 
 public class Comercio : BaseEntity
 {

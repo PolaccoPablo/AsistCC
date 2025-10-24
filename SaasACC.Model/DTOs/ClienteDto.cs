@@ -1,4 +1,4 @@
-﻿namespace SaasACC.Shared.DTOs;
+﻿namespace SaasACC.Model.DTOs;
 
 public class ClienteDto
 {

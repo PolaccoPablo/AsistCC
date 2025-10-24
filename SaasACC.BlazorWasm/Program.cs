@@ -1,10 +1,10 @@
+using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using MudBlazor.Services;
 using SaacACC.BlazorWasm.Services;
 using SaasACC.BlazorWasm;
-using Blazored.LocalStorage;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -19,7 +19,7 @@ builder.Services.AddBlazoredLocalStorage();
 // Configurar HttpClient para conectar con la API
 builder.Services.AddScoped(sp => new HttpClient
 {
-    BaseAddress = new Uri("https://localhost:7000/") // Puerto de tu API
+    BaseAddress = new Uri("https://localhost:7201/") // Puerto de tu API
 });
 
 // Agregar servicios de autenticación

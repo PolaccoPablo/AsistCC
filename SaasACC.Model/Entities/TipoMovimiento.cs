@@ -1,4 +1,4 @@
-﻿namespace SaasACC.Domain.Enums;
+namespace SaasACC.Model.Entities;
 
 public enum TipoMovimiento
 {

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using SaasACC.Model.Servicios.Login;
 
 namespace SaacACC.BlazorWasm.Services
 {
