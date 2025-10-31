@@ -98,9 +98,17 @@
         loading = true;
         try
         {
-            var comercioId = await AuthService.GetComercioId();
-            clientes = await Http.GetFromJsonAsync<List<ClienteDto>>($"api/clientes/comercio/{comercioId}") ?? new();
-            FilterClientes();
+            var response = await Http.GetAsync("api/clientes");
+            if (response.IsSuccessStatusCode)
+            {
+                clientes = await response.Content.ReadFromJsonAsync<List<ClienteDto>>() ?? new();
+                FilterClientes();
+            }
+            else
+            {
+                var errorMessage = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Error al cargar clientes: {response.StatusCode} - {errorMessage}", Severity.Error);
+            }
         }
         catch (Exception ex)
         {

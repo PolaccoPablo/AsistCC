@@ -41,17 +41,16 @@ public class ClienteRepository : IClienteRepository
 
     public async Task<Cliente> CreateAsync(Cliente cliente)
     {
-        // Generar nombre completo
-        cliente.NombreCompleto = $"{cliente.Nombre} {cliente.Apellido}".Trim();
+        // NombreCompleto se calcula automáticamente desde Nombre y Apellido
         
         _context.Clientes.Add(cliente);
         await _context.SaveChangesAsync();
         
         // Crear cuenta corriente automáticamente
+        // Nota: Saldo se calcula automáticamente desde los movimientos
         var cuentaCorriente = new CuentaCorriente
         {
             ClienteId = cliente.Id,
-            Saldo = 0,
             LimiteCredito = 0,
             FechaCreacion = DateTime.UtcNow,
             Activo = true
@@ -66,8 +65,7 @@ public class ClienteRepository : IClienteRepository
 
     public async Task<Cliente> UpdateAsync(Cliente cliente)
     {
-        // Generar nombre completo
-        cliente.NombreCompleto = $"{cliente.Nombre} {cliente.Apellido}".Trim();
+        // NombreCompleto se calcula automáticamente desde Nombre y Apellido
         
         _context.Clientes.Update(cliente);
         await _context.SaveChangesAsync();

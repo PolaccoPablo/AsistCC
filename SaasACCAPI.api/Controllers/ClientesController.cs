@@ -32,6 +32,11 @@ public class ClientesController : ControllerBase
             var clientes = await _clienteService.GetAllClientesAsync(comercioId);
             return Ok(clientes);
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "No se pudo obtener el ComercioId del token");
+            return Unauthorized(ex.Message);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al obtener clientes");
@@ -191,12 +196,21 @@ public class ClientesController : ControllerBase
 
     private int GetComercioIdFromToken()
     {
-        var comercioIdClaim = User.FindFirst("ComercioId")?.Value;
-        if (string.IsNullOrEmpty(comercioIdClaim) || !int.TryParse(comercioIdClaim, out var comercioId))
+        // Intentar obtener ComercioId del claim (varios nombres posibles)
+        var comercioIdClaim = User.FindFirst("ComercioId")?.Value 
+            ?? User.FindFirst(c => c.Type == "ComercioId")?.Value
+            ?? User.FindFirst(c => c.Type.EndsWith("/ComercioId", StringComparison.OrdinalIgnoreCase))?.Value;
+
+        if (!string.IsNullOrEmpty(comercioIdClaim) && int.TryParse(comercioIdClaim, out var comercioId))
         {
-            throw new UnauthorizedAccessException("No se pudo obtener el ID del comercio del token");
+            return comercioId;
         }
-        return comercioId;
+
+        // Log para debug - ver todos los claims disponibles
+        var allClaims = string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}"));
+        _logger.LogWarning("No se encontró ComercioId en los claims. Claims disponibles: {Claims}", allClaims);
+
+        throw new UnauthorizedAccessException($"No se pudo obtener el ID del comercio del token. Claims disponibles: {allClaims}");
     }
 }
 
