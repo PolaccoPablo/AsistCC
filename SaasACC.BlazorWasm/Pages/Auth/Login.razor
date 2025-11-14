@@ -34,8 +34,8 @@
                          OnAdornmentClick="TogglePasswordVisibility"
                          Class="mb-6" />
             
-            <MudButton Variant="Variant.Filled" 
-                      Color="Color.Primary" 
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
                       FullWidth="true"
                       OnClick="HandleLogin"
                       Disabled="@loading"
@@ -47,6 +47,13 @@
                 Iniciar Sesión
             </MudButton>
         </MudForm>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Align="Align.Center">
+            ¿No tienes cuenta?
+            <MudLink Href="/register" Color="Color.Primary">Crear cuenta</MudLink>
+        </MudText>
     </MudPaper>
 </MudContainer>
 

@@ -1,0 +1,56 @@
+@page "/register"
+@using MudBlazor
+@using SaasACC.BlazorWasm.Layout
+@layout EmptyLayout
+@inject NavigationManager Navigation
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center" Style="height: 100vh;">
+    <MudPaper Class="pa-8 mx-auto" Elevation="3" Style="width: 100%;">
+        <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-2">
+            Crear Cuenta
+        </MudText>
+
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6" Color="Color.Default">
+            Selecciona el tipo de cuenta que deseas crear
+        </MudText>
+
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      FullWidth="true"
+                      Size="Size.Large"
+                      StartIcon="@Icons.Material.Filled.Business"
+                      OnClick="@(() => Navigation.NavigateTo("/register/comercio"))"
+                      Class="py-3">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.button">Registrar Comercio</MudText>
+                    <MudText Typo="Typo.caption" Style="text-transform: none;">
+                        Para negocios que desean gestionar cuentas corrientes
+                    </MudText>
+                </MudStack>
+            </MudButton>
+
+            <MudButton Variant="Variant.Outlined"
+                      Color="Color.Primary"
+                      FullWidth="true"
+                      Size="Size.Large"
+                      StartIcon="@Icons.Material.Filled.Person"
+                      OnClick="@(() => Navigation.NavigateTo("/register/cliente"))"
+                      Class="py-3">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.button">Registrar Cliente</MudText>
+                    <MudText Typo="Typo.caption" Style="text-transform: none;">
+                        Para clientes con cuenta en un comercio existente
+                    </MudText>
+                </MudStack>
+            </MudButton>
+        </MudStack>
+
+        <MudDivider Class="my-6" />
+
+        <MudText Align="Align.Center">
+            ¿Ya tienes cuenta?
+            <MudLink Href="/login" Color="Color.Primary">Iniciar Sesión</MudLink>
+        </MudText>
+    </MudPaper>
+</MudContainer>

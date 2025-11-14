@@ -30,6 +30,17 @@ public class UsuarioRepository : IUsuarioRepository
             .FirstOrDefaultAsync(u => u.Id == id && u.Activo);
     }
 
+    public async Task<Usuario> CreateAsync(Usuario usuario)
+    {
+        usuario.FechaCreacion = DateTime.UtcNow;
+        usuario.Activo = true;
+
+        _context.Usuarios.Add(usuario);
+        await _context.SaveChangesAsync();
+
+        return usuario;
+    }
+
     public async Task<bool> ValidatePasswordAsync(string email, string password)
     {
         var usuario = await GetByEmailAsync(email);

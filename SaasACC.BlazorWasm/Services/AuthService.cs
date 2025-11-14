@@ -59,6 +59,61 @@ namespace SaacACC.BlazorWasm.Services
             }
         }
 
+        public async Task<RegisterResponse> RegisterComercio(RegisterComercioRequest request)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(request);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync("api/auth/register/comercio", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                var registerResponse = JsonSerializer.Deserialize<RegisterResponse>(responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (registerResponse?.Success == true && !string.IsNullOrEmpty(registerResponse.Token))
+                {
+                    await _localStorage.SetItemAsync(TOKEN_KEY, registerResponse.Token);
+                    await _localStorage.SetItemAsync(ROLE_KEY, "Admin");
+                    if (registerResponse.ComercioId.HasValue)
+                        await _localStorage.SetItemAsync(COMERCIO_KEY, registerResponse.ComercioId.Value);
+
+                    _httpClient.DefaultRequestHeaders.Authorization =
+                        new AuthenticationHeaderValue("Bearer", registerResponse.Token);
+
+                    ((CustomAuthStateProvider)_authStateProvider).NotifyUserAuthentication(registerResponse.Token);
+                }
+
+                return registerResponse ?? new RegisterResponse { Success = false, ErrorMessage = "Error de conexión" };
+            }
+            catch (Exception ex)
+            {
+                return new RegisterResponse { Success = false, ErrorMessage = ex.Message };
+            }
+        }
+
+        public async Task<RegisterResponse> RegisterCliente(RegisterClienteRequest request)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(request);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync("api/auth/register/cliente", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                var registerResponse = JsonSerializer.Deserialize<RegisterResponse>(responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                return registerResponse ?? new RegisterResponse { Success = false, ErrorMessage = "Error de conexión" };
+            }
+            catch (Exception ex)
+            {
+                return new RegisterResponse { Success = false, ErrorMessage = ex.Message };
+            }
+        }
+
         public async Task Logout()
         {
             await _localStorage.RemoveItemAsync(TOKEN_KEY);

@@ -1,1 +1,338 @@
-# AsistCC
+# AsistCC - SaaS Cuentas Corrientes
+
+Sistema SaaS de gestión de cuentas corrientes para comercios y sus clientes, desarrollado con .NET 8 y Blazor WebAssembly.
+
+## 📋 Descripción
+
+AsistCC es una plataforma que permite a comercios gestionar las cuentas corrientes de sus clientes, registrar movimientos (debe/haber), establecer límites de crédito, y proporcionar a los clientes acceso para consultar su estado de cuenta.
+
+## 🚀 Tecnologías
+
+### Backend
+- **.NET 8** - Framework principal
+- **ASP.NET Core Web API** - API RESTful
+- **Entity Framework Core** - ORM para acceso a datos
+- **SQL Server LocalDB** - Base de datos
+- **JWT Bearer Authentication** - Autenticación y autorización
+- **Swagger/OpenAPI** - Documentación de API
+
+### Frontend
+- **Blazor WebAssembly** - SPA Framework
+- **MudBlazor** - Componentes Material Design
+- **Blazored.LocalStorage** - Almacenamiento local
+- **HttpClient** - Comunicación con API
+
+## 📦 Estructura del Proyecto
+
+```
+SaaSCuentasCorrientes/
+├── SaasACC.Model/              # Entidades y DTOs
+│   ├── Entities/               # Modelos de dominio
+│   └── Servicios/Login/        # DTOs de autenticación
+├── SaasACC.Domain/             # Lógica de dominio
+├── SaasACC.Application/        # Servicios y casos de uso
+│   ├── Services/               # AuthService, ClienteService
+│   └── Interfaces/             # Interfaces de repositorios
+├── SaasACC.Infrastructure/     # Acceso a datos
+│   └── Repositories/           # Implementación de repositorios
+├── SaasACCAPI.api/             # Web API
+│   ├── Controllers/            # Endpoints REST
+│   └── Program.cs              # Configuración
+└── SaasACC.BlazorWasm/         # Frontend SPA
+    ├── Pages/                  # Páginas Razor
+    ├── Components/             # Componentes reutilizables
+    └── Services/               # Servicios del cliente
+```
+
+## ✨ Funcionalidades Implementadas
+
+### 🔐 Autenticación y Registro
+
+#### Sistema de Login
+- Login con email y password
+- Generación de JWT Token (válido por 24 horas)
+- Roles: SuperAdmin, Admin, Usuario
+- Almacenamiento seguro del token en localStorage
+- Redirección automática según rol del usuario
+
+#### Sistema de Registro con Dos Botones Separados
+- **Página de selección**: Dos botones claramente diferenciados
+  - 🏢 **Registrar Comercio**: Para negocios
+  - 👤 **Registrar Cliente**: Para clientes de comercios existentes
+
+##### Registro de Comercio
+- Formulario completo dividido en dos secciones:
+  - **Datos del Comercio**: Nombre, email, teléfono, dirección
+  - **Datos del Administrador**: Nombre, email, password
+- Validaciones en tiempo real
+- Creación automática de usuario administrador
+- Login automático después del registro
+- Generación de token JWT
+- Redirección a dashboard de administración
+
+##### Registro de Cliente
+- Selector de comercio (dropdown con lista de comercios activos)
+- Formulario de datos personales:
+  - Nombre, apellido, email, teléfono
+  - DNI (opcional)
+  - Dirección (opcional)
+- Creación automática de cuenta corriente asociada
+- Redirección a login después del registro exitoso
+
+### 👥 Gestión de Clientes (Admin)
+- CRUD completo de clientes
+- Listado de clientes por comercio
+- Búsqueda y filtrado
+- Soft delete (desactivación sin borrado físico)
+- Creación automática de cuenta corriente por cliente
+
+### 💰 Cuentas Corrientes
+- Creación automática al registrar cliente
+- Gestión de límite de crédito
+- Cálculo automático de saldo
+- Estado de cuenta (bloqueada/activa)
+- Observaciones
+
+### 📊 Movimientos
+- Registro de movimientos tipo Debe y Haber
+- Cálculo automático de saldo
+- Historial de movimientos por cliente
+
+## 🌐 Endpoints API
+
+### Autenticación
+```
+POST   /api/auth/login                  # Iniciar sesión
+POST   /api/auth/register/comercio      # Registrar comercio nuevo
+POST   /api/auth/register/cliente       # Registrar cliente
+```
+
+### Comercios
+```
+GET    /api/comercios                   # Listar comercios activos
+```
+
+### Clientes
+```
+GET    /api/clientes                    # Listar clientes del comercio
+GET    /api/clientes/{id}               # Obtener cliente por ID
+POST   /api/clientes                    # Crear cliente
+PUT    /api/clientes/{id}               # Actualizar cliente
+DELETE /api/clientes/{id}               # Eliminar cliente (soft delete)
+```
+
+## 🗄️ Modelo de Base de Datos
+
+### Entidades Principales
+
+**Comercio**
+- Información del negocio
+- Configuración de notificaciones
+- Relación 1:N con Usuarios y Clientes
+
+**Usuario**
+- Administradores y operadores del comercio
+- Autenticación con email/password
+- Roles: Admin, Usuario, SuperAdmin
+- Pertenece a un Comercio
+
+**Cliente**
+- Deudores/acreedores del comercio
+- Información de contacto
+- Tiene una CuentaCorriente
+
+**CuentaCorriente**
+- Límite de crédito
+- Saldo calculado desde movimientos
+- Estado (bloqueada/activa)
+
+**Movimiento**
+- Tipo: Debe/Haber
+- Importe
+- Fecha
+- Descripción
+
+## 🔒 Seguridad
+
+### Implementado
+- ✅ Passwords hasheados con SHA256
+- ✅ JWT Token con expiración
+- ✅ Claims personalizados (UserId, Email, Role, ComercioId)
+- ✅ CORS configurado
+- ✅ Validación de datos (Data Annotations)
+- ✅ Soft delete en todas las entidades
+- ✅ Multi-tenancy por ComercioId
+
+### Recomendaciones Futuras
+- ⚠️ Migrar de SHA256 a BCrypt/Argon2
+- ⚠️ Implementar rate limiting
+- ⚠️ Añadir verificación de email
+- ⚠️ CAPTCHA en registro
+- ⚠️ Refresh tokens
+- ⚠️ Two-factor authentication
+
+## 🚀 Cómo Ejecutar
+
+### Prerequisitos
+- .NET 8 SDK
+- SQL Server LocalDB
+- Visual Studio 2022 (recomendado) o VS Code
+
+### Pasos
+
+1. **Clonar el repositorio**
+```bash
+git clone <repository-url>
+cd SaaSCuentasCorrientes
+```
+
+2. **Restaurar paquetes**
+```bash
+dotnet restore
+```
+
+3. **Configurar la base de datos**
+```bash
+cd SaasACC.Infrastructure
+dotnet ef database update
+```
+
+4. **Ejecutar la API**
+```bash
+cd SaasACCAPI.api
+dotnet run
+```
+La API estará disponible en: `https://localhost:7201`
+
+5. **Ejecutar el Frontend (en otra terminal)**
+```bash
+cd SaasACC.BlazorWasm
+dotnet run
+```
+El frontend estará disponible en: `https://localhost:7163`
+
+### Configuración
+
+**appsettings.json** (API):
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=SaasAccDB;Trusted_Connection=true;MultipleActiveResultSets=true"
+  },
+  "Jwt": {
+    "Key": "TuClaveSecretaMuyLarga",
+    "Issuer": "SaasACC.API",
+    "Audience": "SaasACC.Client",
+    "ExpiryHours": 24
+  }
+}
+```
+
+**wwwroot/appsettings.json** (Blazor):
+```json
+{
+  "ApiBaseUrl": "https://localhost:7201"
+}
+```
+
+## 📱 Flujo de Usuario
+
+### Para Comercios
+1. **Registro**: Completar formulario de comercio + administrador
+2. **Login automático**: Se genera token JWT
+3. **Dashboard**: Acceso a gestión de clientes
+4. **Gestionar clientes**: Crear, editar, ver cuentas corrientes
+5. **Registrar movimientos**: Debe/Haber en cuentas de clientes
+
+### Para Clientes
+1. **Registro**: Seleccionar comercio + completar datos
+2. **Login**: Iniciar sesión (futuro)
+3. **Ver cuenta**: Consultar saldo y movimientos (futuro)
+4. **Historial**: Ver movimientos históricos (futuro)
+
+## 📝 Validaciones
+
+### Backend (Data Annotations)
+- Campos requeridos
+- Formato de email
+- Formato de teléfono
+- Longitud mínima/máxima
+- Comparación de passwords
+
+### Backend (Lógica de Negocio)
+- Email único de comercio
+- Email único de usuario
+- Email único de cliente por comercio
+- Comercio debe existir
+- Creación automática de cuenta corriente
+
+### Frontend
+- Validación en tiempo real con MudBlazor
+- Mensajes de error personalizados
+- Validación de formato
+- Confirmación de passwords
+
+## 🎯 Próximas Funcionalidades
+
+- [ ] Verificación de email
+- [ ] Recuperación de contraseña
+- [ ] Dashboard para clientes (autogestión)
+- [ ] Notificaciones por email/WhatsApp
+- [ ] Exportación de movimientos (PDF, Excel)
+- [ ] Reportes y estadísticas
+- [ ] Configuración de comercio
+- [ ] Gestión de usuarios por comercio
+- [ ] Two-factor authentication
+- [ ] Límites de crédito dinámicos
+- [ ] Alertas de vencimiento
+- [ ] Historial de auditoría
+
+## 🧪 Testing
+
+### Estado Actual
+- ✅ Compilación exitosa
+- ⏳ Unit tests pendientes
+- ⏳ Integration tests pendientes
+- ⏳ UI tests pendientes
+
+### Testing Manual Recomendado
+1. Registrar comercio nuevo
+2. Verificar creación de usuario admin
+3. Login con comercio registrado
+4. Crear clientes
+5. Verificar creación automática de cuenta corriente
+6. Registrar cliente desde formulario público
+7. Verificar validaciones de email duplicado
+
+## 📄 Documentación
+
+- **resumenDesarrollo.txt**: Resumen detallado de cada implementación
+- **claude.md**: Guía para mantener documentación actualizada
+- **Swagger UI**: Disponible en `https://localhost:7201/swagger`
+
+## 🤝 Contribución
+
+Este es un proyecto en desarrollo activo. Para contribuir:
+
+1. Crear un branch desde `main`
+2. Implementar la funcionalidad
+3. Crear Pull Request
+4. Actualizar documentación
+
+## 📜 Licencia
+
+[Especificar licencia]
+
+## 👨‍💻 Autor
+
+Pablo - [GitHub](https://github.com/PolaccoPablo)
+
+## 📞 Soporte
+
+Para reportar bugs o solicitar funcionalidades, crear un issue en GitHub.
+
+---
+
+**Última actualización**: 2025-11-13
+**Branch actual**: 8-usuario-por-autogestión
+**Versión**: 1.0.0-beta

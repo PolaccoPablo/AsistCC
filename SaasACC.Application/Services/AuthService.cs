@@ -4,6 +4,7 @@ using SaasACC.Model.Entities;
 using SaasACC.Model.Servicios.Login;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 
@@ -12,17 +13,27 @@ namespace SaasACC.Application.Services;
 public interface IAuthService
 {
     Task<LoginResponse> LoginAsync(LoginRequest request);
+    Task<RegisterResponse> RegisterComercioAsync(RegisterComercioRequest request);
+    Task<RegisterResponse> RegisterClienteAsync(RegisterClienteRequest request);
     string GenerateJwtTokenAsync(Usuario usuario);
 }
 
 public class AuthService : IAuthService
 {
     private readonly IUsuarioRepository _usuarioRepository;
+    private readonly IComercioRepository _comercioRepository;
+    private readonly IClienteRepository _clienteRepository;
     private readonly IConfiguration _configuration;
 
-    public AuthService(IUsuarioRepository usuarioRepository, IConfiguration configuration)
+    public AuthService(
+        IUsuarioRepository usuarioRepository,
+        IComercioRepository comercioRepository,
+        IClienteRepository clienteRepository,
+        IConfiguration configuration)
     {
         _usuarioRepository = usuarioRepository;
+        _comercioRepository = comercioRepository;
+        _clienteRepository = clienteRepository;
         _configuration = configuration;
     }
 
@@ -113,5 +124,148 @@ public class AuthService : IAuthService
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public async Task<RegisterResponse> RegisterComercioAsync(RegisterComercioRequest request)
+    {
+        try
+        {
+            // Validar que no exista el email del comercio
+            if (await _comercioRepository.EmailExistsAsync(request.EmailComercio))
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Ya existe un comercio registrado con este email"
+                };
+            }
+
+            // Validar que no exista el email del administrador
+            var adminExists = await _usuarioRepository.GetByEmailAsync(request.EmailAdmin);
+            if (adminExists != null)
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Ya existe un usuario registrado con este email"
+                };
+            }
+
+            // Crear el comercio
+            var comercio = new Comercio
+            {
+                Nombre = request.NombreComercio,
+                Email = request.EmailComercio,
+                Telefono = request.TelefonoComercio,
+                Direccion = request.DireccionComercio,
+                NotificacionesEmail = true,
+                NotificacionesWhatsApp = false,
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            };
+
+            comercio = await _comercioRepository.CreateAsync(comercio);
+
+            // Crear el usuario administrador
+            var usuario = new Usuario
+            {
+                Nombre = request.NombreAdmin,
+                Email = request.EmailAdmin,
+                PasswordHash = HashPassword(request.Password),
+                Rol = "Admin",
+                ComercioId = comercio.Id
+            };
+
+            usuario = await _usuarioRepository.CreateAsync(usuario);
+
+            // Generar token JWT
+            var token = GenerateJwtTokenAsync(usuario);
+
+            return new RegisterResponse
+            {
+                Success = true,
+                Message = "Comercio registrado exitosamente",
+                Token = token,
+                ComercioId = comercio.Id
+            };
+        }
+        catch (Exception ex)
+        {
+            return new RegisterResponse
+            {
+                Success = false,
+                ErrorMessage = $"Error al registrar comercio: {ex.Message}"
+            };
+        }
+    }
+
+    public async Task<RegisterResponse> RegisterClienteAsync(RegisterClienteRequest request)
+    {
+        try
+        {
+            // Validar que el comercio existe
+            if (!await _comercioRepository.ExistsAsync(request.ComercioId))
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "El comercio seleccionado no existe"
+                };
+            }
+
+            // Validar que no exista el email del cliente en este comercio
+            if (await _clienteRepository.EmailExistsAsync(request.Email, request.ComercioId))
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Ya existe un cliente con este email en el comercio seleccionado"
+                };
+            }
+
+            // Crear el cliente
+            var cliente = new Cliente
+            {
+                Nombre = request.Nombre,
+                Apellido = request.Apellido,
+                Email = request.Email,
+                Telefono = request.Telefono,
+                Direccion = request.Direccion,
+                DNI = request.DNI,
+                ComercioId = request.ComercioId,
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            };
+
+            cliente = await _clienteRepository.CreateAsync(cliente);
+
+            // Si se proporcionó password, crear credenciales de acceso
+            // TODO: Implementar sistema de credenciales para clientes si se requiere
+            string token = string.Empty;
+
+            return new RegisterResponse
+            {
+                Success = true,
+                Message = "Cliente registrado exitosamente",
+                Token = token,
+                ComercioId = request.ComercioId,
+                ClienteId = cliente.Id
+            };
+        }
+        catch (Exception ex)
+        {
+            return new RegisterResponse
+            {
+                Success = false,
+                ErrorMessage = $"Error al registrar cliente: {ex.Message}"
+            };
+        }
+    }
+
+    private static string HashPassword(string password)
+    {
+        using var sha256 = SHA256.Create();
+        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+        return Convert.ToBase64String(hashedBytes);
     }
 }

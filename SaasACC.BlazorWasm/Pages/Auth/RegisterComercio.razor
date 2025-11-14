@@ -1,0 +1,171 @@
+@page "/register/comercio"
+@using MudBlazor
+@using SaacACC.BlazorWasm.Services
+@using SaasACC.BlazorWasm.Layout
+@using SaasACC.Model.Servicios.Login
+@layout EmptyLayout
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="d-flex align-center" Style="min-height: 100vh; padding: 2rem 0;">
+    <MudPaper Class="pa-8 mx-auto" Elevation="3" Style="width: 100%;">
+        <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-2">
+            Registrar Comercio
+        </MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-6" Color="Color.Default">
+            Crea tu cuenta de comercio y comienza a gestionar tus cuentas corrientes
+        </MudText>
+
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudText Typo="Typo.h6" Class="mb-3 mt-4">Datos del Comercio</MudText>
+
+            <MudTextField @bind-Value="model.NombreComercio"
+                         Label="Nombre del Comercio"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="El nombre del comercio es requerido"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="model.EmailComercio"
+                         Label="Email del Comercio"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="El email es requerido"
+                         InputType="InputType.Email"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="model.TelefonoComercio"
+                         Label="Teléfono"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="El teléfono es requerido"
+                         InputType="InputType.Telephone"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="model.DireccionComercio"
+                         Label="Dirección"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="La dirección es requerida"
+                         Lines="2"
+                         Class="mb-4" />
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.h6" Class="mb-3">Datos del Administrador</MudText>
+
+            <MudTextField @bind-Value="model.NombreAdmin"
+                         Label="Nombre del Administrador"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="El nombre es requerido"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="model.EmailAdmin"
+                         Label="Email del Administrador"
+                         Variant="Variant.Outlined"
+                         Required="true"
+                         RequiredError="El email es requerido"
+                         InputType="InputType.Email"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="model.Password"
+                         Label="Contraseña"
+                         Variant="Variant.Outlined"
+                         InputType="@passwordInputType"
+                         Required="true"
+                         RequiredError="La contraseña es requerida"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@passwordInputIcon"
+                         OnAdornmentClick="TogglePasswordVisibility"
+                         Class="mb-3" />
+
+            <MudTextField @bind-Value="model.ConfirmPassword"
+                         Label="Confirmar Contraseña"
+                         Variant="Variant.Outlined"
+                         InputType="@passwordInputType"
+                         Required="true"
+                         RequiredError="Debe confirmar la contraseña"
+                         Class="mb-6" />
+
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      FullWidth="true"
+                      OnClick="HandleRegister"
+                      Disabled="@loading"
+                      Class="py-2 mb-3">
+                @if (loading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Crear Cuenta
+            </MudButton>
+
+            <MudButton Variant="Variant.Text"
+                      Color="Color.Default"
+                      FullWidth="true"
+                      OnClick="@(() => Navigation.NavigateTo("/register"))">
+                Volver
+            </MudButton>
+        </MudForm>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Align="Align.Center">
+            ¿Ya tienes cuenta?
+            <MudLink Href="/login" Color="Color.Primary">Iniciar Sesión</MudLink>
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm form = null!;
+    private RegisterComercioRequest model = new();
+    private bool success;
+    private bool loading;
+
+    private InputType passwordInputType = InputType.Password;
+    private string passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+
+    void TogglePasswordVisibility()
+    {
+        if (passwordInputType == InputType.Password)
+        {
+            passwordInputType = InputType.Text;
+            passwordInputIcon = Icons.Material.Filled.Visibility;
+        }
+        else
+        {
+            passwordInputType = InputType.Password;
+            passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        // Validar que las contraseñas coincidan
+        if (model.Password != model.ConfirmPassword)
+        {
+            Snackbar.Add("Las contraseñas no coinciden", Severity.Error);
+            return;
+        }
+
+        loading = true;
+
+        var result = await AuthService.RegisterComercio(model);
+
+        if (result.Success)
+        {
+            Snackbar.Add("Comercio registrado exitosamente. Redirigiendo...", Severity.Success);
+            await Task.Delay(1000);
+            Navigation.NavigateTo("/admin/clientes");
+        }
+        else
+        {
+            Snackbar.Add(result.ErrorMessage, Severity.Error);
+        }
+
+        loading = false;
+    }
+}
