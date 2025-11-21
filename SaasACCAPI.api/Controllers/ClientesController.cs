@@ -22,13 +22,14 @@ public class ClientesController : ControllerBase
     /// <summary>
     /// Obtiene todos los clientes del comercio del usuario autenticado
     /// </summary>
+    /// <param name="estadoId">Filtro opcional por estado: 1=Pendiente, 2=Activo, 3=Inactivo</param>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ClienteDto>>> GetClientes()
+    public async Task<ActionResult<IEnumerable<ClienteDto>>> GetClientes([FromQuery] int? estadoId = null)
     {
         try
         {
             var comercioId = GetComercioIdFromToken();
-            var clientes = await _clienteService.GetAllClientesAsync(comercioId);
+            var clientes = await _clienteService.GetAllClientesAsync(comercioId, estadoId);
 
             return Ok(clientes);
         }
@@ -192,6 +193,91 @@ public class ClientesController : ControllerBase
             _logger.LogError(ex, "Error al verificar email {Email}", email);
             return StatusCode(500, "Error interno del servidor");
         }
+    }
+
+    /// <summary>
+    /// Obtiene todos los clientes pendientes de aprobación
+    /// </summary>
+    [HttpGet("pendientes")]
+    public async Task<ActionResult<IEnumerable<ClienteDto>>> GetClientesPendientes()
+    {
+        try
+        {
+            var comercioId = GetComercioIdFromToken();
+            var clientes = await _clienteService.GetClientesPendientesAsync(comercioId);
+
+            return Ok(clientes);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "No se pudo obtener el ComercioId del token");
+            return Unauthorized(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener clientes pendientes");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    /// <summary>
+    /// Aprueba un cliente pendiente
+    /// </summary>
+    [HttpPost("{id}/aprobar")]
+    public async Task<ActionResult<ClienteDto>> AprobarCliente(int id)
+    {
+        try
+        {
+            var usuarioId = GetUsuarioIdFromToken();
+            var cliente = await _clienteService.AprobarClienteAsync(id, usuarioId);
+
+            return Ok(cliente);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al aprobar cliente {ClienteId}", id);
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    /// <summary>
+    /// Rechaza un cliente pendiente
+    /// </summary>
+    [HttpPost("{id}/rechazar")]
+    public async Task<ActionResult<ClienteDto>> RechazarCliente(int id)
+    {
+        try
+        {
+            var usuarioId = GetUsuarioIdFromToken();
+            var cliente = await _clienteService.RechazarClienteAsync(id, usuarioId);
+
+            return Ok(cliente);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al rechazar cliente {ClienteId}", id);
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    private int GetUsuarioIdFromToken()
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out var usuarioId))
+        {
+            return usuarioId;
+        }
+
+        throw new UnauthorizedAccessException("No se pudo obtener el ID del usuario del token");
     }
 
     private int GetComercioIdFromToken()

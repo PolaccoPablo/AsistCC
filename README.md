@@ -70,21 +70,43 @@ SaaSCuentasCorrientes/
 - Generación de token JWT
 - Redirección a dashboard de administración
 
-##### Registro de Cliente
+##### Registro de Cliente (Autogestión)
 - Selector de comercio (dropdown con lista de comercios activos)
 - Formulario de datos personales:
-  - Nombre, apellido, email, teléfono
+  - Nombre, apellido, email, teléfono, password
   - DNI (opcional)
   - Dirección (opcional)
-- Creación automática de cuenta corriente asociada
-- Redirección a login después del registro exitoso
+- **Flujo de Aprobación**:
+  - Cliente queda en estado "Pendiente" al registrarse
+  - Creación de usuario con rol "Cliente"
+  - NO puede hacer login hasta ser aprobado
+  - Cuenta corriente se crea solo cuando el comercio lo aprueba
+- Mensaje de confirmación y redirección a login
 
 ### 👥 Gestión de Clientes (Admin)
+
+#### Sistema de Aprobación de Clientes
+- **Diferenciación por Origen**:
+  - 🏢 **Administración**: Clientes creados por el admin (auto-aprobados)
+  - 👤 **Autogestión**: Clientes auto-registrados (requieren aprobación)
+- **Estados de Cliente**:
+  - ⏳ Pendiente: Esperando aprobación del comercio
+  - ✅ Activo: Aprobado y con acceso al sistema
+  - ❌ Inactivo: Rechazado o desactivado
+- **Flujo de Aprobación**:
+  - Clientes auto-registrados quedan pendientes
+  - Admin puede aprobar o rechazar desde interfaz dedicada
+  - Página específica para revisar pendientes
+  - Filtros por estado en lista de clientes
+  - Cuenta corriente se crea solo al aprobar
+- **Auditoría**: Registro de quién y cuándo aprobó/rechazó cada cliente
+
+#### Gestión General
 - CRUD completo de clientes
 - Listado de clientes por comercio
-- Búsqueda y filtrado
+- Búsqueda y filtrado por estado
 - Soft delete (desactivación sin borrado físico)
-- Creación automática de cuenta corriente por cliente
+- Creación automática de cuenta corriente (al aprobar o para admin-created)
 
 ### 💰 Cuentas Corrientes
 - Creación automática al registrar cliente
@@ -114,9 +136,12 @@ GET    /api/comercios                   # Listar comercios activos
 
 ### Clientes
 ```
-GET    /api/clientes                    # Listar clientes del comercio
+GET    /api/clientes?estadoId={id}      # Listar clientes (filtro opcional por estado)
 GET    /api/clientes/{id}               # Obtener cliente por ID
-POST   /api/clientes                    # Crear cliente
+GET    /api/clientes/pendientes         # Listar solo clientes pendientes de aprobación
+POST   /api/clientes                    # Crear cliente (admin - auto-aprobado)
+POST   /api/clientes/{id}/aprobar       # Aprobar cliente pendiente
+POST   /api/clientes/{id}/rechazar      # Rechazar cliente pendiente
 PUT    /api/clientes/{id}               # Actualizar cliente
 DELETE /api/clientes/{id}               # Eliminar cliente (soft delete)
 ```
@@ -131,15 +156,23 @@ DELETE /api/clientes/{id}               # Eliminar cliente (soft delete)
 - Relación 1:N con Usuarios y Clientes
 
 **Usuario**
-- Administradores y operadores del comercio
+- Administradores, operadores del comercio y clientes
 - Autenticación con email/password
-- Roles: Admin, Usuario, SuperAdmin
+- Roles: Admin, Usuario, SuperAdmin, Cliente
 - Pertenece a un Comercio
+
+**EstadoCliente** ⭐ NUEVO
+- Sistema extensible de estados
+- Estados: Pendiente, Activo, Inactivo
+- Permite agregar nuevos estados en el futuro
 
 **Cliente**
 - Deudores/acreedores del comercio
 - Información de contacto
-- Tiene una CuentaCorriente
+- Estado (Pendiente/Activo/Inactivo)
+- Origen (Administración/Autogestión)
+- Usuario asociado (opcional, solo para autogestión)
+- Tiene una CuentaCorriente (creada al aprobar)
 
 **CuentaCorriente**
 - Límite de crédito
@@ -244,11 +277,13 @@ El frontend estará disponible en: `https://localhost:7163`
 4. **Gestionar clientes**: Crear, editar, ver cuentas corrientes
 5. **Registrar movimientos**: Debe/Haber en cuentas de clientes
 
-### Para Clientes
-1. **Registro**: Seleccionar comercio + completar datos
-2. **Login**: Iniciar sesión (futuro)
-3. **Ver cuenta**: Consultar saldo y movimientos (futuro)
-4. **Historial**: Ver movimientos históricos (futuro)
+### Para Clientes (Autogestión)
+1. **Registro**: Seleccionar comercio + completar datos + crear password
+2. **Espera de Aprobación**: Estado pendiente, no puede hacer login
+3. **Notificación**: Comercio revisa y aprueba/rechaza (futuro: email)
+4. **Login**: Iniciar sesión después de aprobación
+5. **Ver cuenta**: Consultar saldo y movimientos (futuro)
+6. **Historial**: Ver movimientos históricos (futuro)
 
 ## 📝 Validaciones
 
@@ -274,10 +309,20 @@ El frontend estará disponible en: `https://localhost:7163`
 
 ## 🎯 Próximas Funcionalidades
 
+### Sistema de Aprobación
+- [ ] Notificaciones por email al cliente cuando es aprobado/rechazado
+- [ ] Badge en menú con cantidad de clientes pendientes
+- [ ] Razón de rechazo (campo adicional)
+- [ ] Confirmación antes de rechazar cliente
+- [ ] Aprobación masiva (bulk approval)
+- [ ] Re-activación de clientes rechazados
+- [ ] Historial de aprobaciones/rechazos
+
+### Funcionalidades Generales
 - [ ] Verificación de email
 - [ ] Recuperación de contraseña
 - [ ] Dashboard para clientes (autogestión)
-- [ ] Notificaciones por email/WhatsApp
+- [ ] Notificaciones por email/WhatsApp para movimientos
 - [ ] Exportación de movimientos (PDF, Excel)
 - [ ] Reportes y estadísticas
 - [ ] Configuración de comercio
@@ -285,7 +330,6 @@ El frontend estará disponible en: `https://localhost:7163`
 - [ ] Two-factor authentication
 - [ ] Límites de crédito dinámicos
 - [ ] Alertas de vencimiento
-- [ ] Historial de auditoría
 
 ## 🧪 Testing
 
@@ -333,6 +377,26 @@ Para reportar bugs o solicitar funcionalidades, crear un issue en GitHub.
 
 ---
 
-**Última actualización**: 2025-11-13
+**Última actualización**: 2025-11-20
 **Branch actual**: 8-usuario-por-autogestión
-**Versión**: 1.0.0-beta
+**Versión**: 1.1.0-beta
+
+## 📋 Changelog
+
+### v1.1.0-beta (2025-11-20)
+- ✨ **Sistema de Aprobación de Clientes**: Diferenciación entre clientes creados por admin vs autogestión
+- ✨ **Estados de Cliente**: Pendiente, Activo, Inactivo (extensible)
+- ✨ **Página de Pendientes**: Interfaz dedicada para revisar y aprobar clientes
+- ✨ **Filtros por Estado**: Filtrado de clientes por estado en lista principal
+- ✨ **Validación de Login**: Clientes pendientes/inactivos no pueden iniciar sesión
+- ✨ **Auditoría**: Registro de quién y cuándo aprobó cada cliente
+- 🔧 **Arquitectura**: Usuario unificado con rol "Cliente" para autogestión
+- 🔧 **Cuenta Corriente**: Se crea solo al aprobar cliente (no al registrar)
+
+### v1.0.0-beta (2025-11-13)
+- ✨ Sistema de registro con dos botones separados (Comercio/Cliente)
+- ✨ CRUD completo de clientes
+- ✨ Gestión de cuentas corrientes
+- ✨ Sistema de movimientos
+- ✨ Autenticación JWT
+- ✨ Multi-tenancy por comercio
