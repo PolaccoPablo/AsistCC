@@ -10,10 +10,20 @@ public class Cliente : BaseEntity
     public string? DNI { get; set; }
     public int ComercioId { get; set; }
 
+    // Nuevos campos para autogestión y aprobación
+    public int EstadoId { get; set; } // FK a EstadoCliente
+    public int? UsuarioId { get; set; } // FK nullable a Usuario
+    public int OrigenRegistro { get; set; } // 1: Administracion, 2: Autogestion
+    public DateTime? FechaAprobacion { get; set; }
+    public int? AprobadoPorUsuarioId { get; set; } // FK a Usuario
+
     // Propiedades calculadas
     public string NombreCompleto => $"{Nombre} {Apellido}".Trim();
 
     // Navegación
     public virtual Comercio Comercio { get; set; } = null!;
     public virtual CuentaCorriente? CuentaCorriente { get; set; }
+    public virtual EstadoCliente Estado { get; set; } = null!;
+    public virtual Usuario? Usuario { get; set; }
+    public virtual Usuario? AprobadoPor { get; set; }
 }

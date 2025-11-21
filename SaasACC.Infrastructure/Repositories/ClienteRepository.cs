@@ -14,11 +14,20 @@ public class ClienteRepository : IClienteRepository
         _context = context;
     }
 
-    public async Task<IEnumerable<Cliente>> GetAllAsync(int comercioId)
+    public async Task<IEnumerable<Cliente>> GetAllAsync(int comercioId, int? estadoId = null)
     {
-        return await _context.Clientes
+        var query = _context.Clientes
             .Include(c => c.CuentaCorriente)
-            .Where(c => c.ComercioId == comercioId && c.Activo)
+            .Include(c => c.Estado)
+            .Include(c => c.Usuario)
+            .Where(c => c.ComercioId == comercioId && c.Activo);
+
+        if (estadoId.HasValue)
+        {
+            query = query.Where(c => c.EstadoId == estadoId.Value);
+        }
+
+        return await query
             .OrderBy(c => c.Nombre)
             .ThenBy(c => c.Apellido)
             .ToListAsync();
@@ -29,6 +38,9 @@ public class ClienteRepository : IClienteRepository
         return await _context.Clientes
             .Include(c => c.CuentaCorriente)
             .Include(c => c.Comercio)
+            .Include(c => c.Estado)
+            .Include(c => c.Usuario)
+            .Include(c => c.AprobadoPor)
             .FirstOrDefaultAsync(c => c.Id == id && c.Activo);
     }
 
@@ -42,24 +54,14 @@ public class ClienteRepository : IClienteRepository
     public async Task<Cliente> CreateAsync(Cliente cliente)
     {
         // NombreCompleto se calcula automáticamente desde Nombre y Apellido
-        
+
         _context.Clientes.Add(cliente);
         await _context.SaveChangesAsync();
-        
-        // Crear cuenta corriente automáticamente
-        // Nota: Saldo se calcula automáticamente desde los movimientos
-        var cuentaCorriente = new CuentaCorriente
-        {
-            ClienteId = cliente.Id,
-            LimiteCredito = 0,
-            FechaCreacion = DateTime.UtcNow,
-            Activo = true
-        };
-        
-        _context.CuentasCorrientes.Add(cuentaCorriente);
-        await _context.SaveChangesAsync();
-        
-        // Recargar el cliente con la cuenta corriente
+
+        // NOTA: Ya NO se crea la CuentaCorriente automáticamente
+        // Se creará solo cuando el cliente sea aprobado (EstadoId = 2)
+
+        // Recargar el cliente con las navegaciones
         return await GetByIdAsync(cliente.Id) ?? cliente;
     }
 
@@ -105,13 +107,39 @@ public class ClienteRepository : IClienteRepository
     {
         var query = _context.Clientes
             .Where(c => c.Email == email && c.ComercioId == comercioId && c.Activo);
-        
+
         if (excludeId.HasValue)
         {
             query = query.Where(c => c.Id != excludeId.Value);
         }
-        
+
         return await query.AnyAsync();
+    }
+
+    public async Task<CuentaCorriente> CrearCuentaCorrienteAsync(int clienteId)
+    {
+        // Verificar que el cliente no tenga ya una cuenta corriente
+        var cuentaExistente = await _context.CuentasCorrientes
+            .FirstOrDefaultAsync(cc => cc.ClienteId == clienteId);
+
+        if (cuentaExistente != null)
+        {
+            return cuentaExistente;
+        }
+
+        // Crear nueva cuenta corriente
+        var cuentaCorriente = new CuentaCorriente
+        {
+            ClienteId = clienteId,
+            LimiteCredito = 0,
+            FechaCreacion = DateTime.UtcNow,
+            Activo = true
+        };
+
+        _context.CuentasCorrientes.Add(cuentaCorriente);
+        await _context.SaveChangesAsync();
+
+        return cuentaCorriente;
     }
 }
 

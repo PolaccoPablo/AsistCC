@@ -10,6 +10,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Cliente> Clientes { get; set; }
     public DbSet<CuentaCorriente> CuentasCorrientes { get; set; }
     public DbSet<Movimiento> Movimientos { get; set; }
+    public DbSet<EstadoCliente> EstadosCliente { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -26,6 +27,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // Configurar entidades
         ConfigurarComercio(modelBuilder);
         ConfigurarUsuario(modelBuilder);
+        ConfigurarEstadoCliente(modelBuilder);
         ConfigurarCliente(modelBuilder);
         ConfigurarCuentaCorriente(modelBuilder);
         ConfigurarMovimiento(modelBuilder);
@@ -126,6 +128,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(c => c.DNI)
                 .HasMaxLength(20);
 
+            entity.Property(c => c.OrigenRegistro)
+                .IsRequired()
+                .HasDefaultValue(1); // 1: Administracion, 2: Autogestion
+
             entity.HasOne(c => c.Comercio)
                 .WithMany(co => co.Clientes)
                 .HasForeignKey(c => c.ComercioId)
@@ -136,7 +142,46 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey<CuentaCorriente>(cc => cc.ClienteId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(c => c.Estado)
+                .WithMany(e => e.Clientes)
+                .HasForeignKey(c => c.EstadoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.Usuario)
+                .WithMany()
+                .HasForeignKey(c => c.UsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.AprobadoPor)
+                .WithMany(u => u.ClientesAprobados)
+                .HasForeignKey(c => c.AprobadoPorUsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(c => new { c.ComercioId, c.Email }).IsUnique();
+            entity.HasIndex(c => c.EstadoId);
+        });
+    }
+
+    private static void ConfigurarEstadoCliente(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EstadoCliente>(entity =>
+        {
+            entity.ToTable("EstadosCliente");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Nombre)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(e => e.Descripcion)
+                .HasMaxLength(200);
+
+            // Seed de datos iniciales
+            entity.HasData(
+                new EstadoCliente { Id = 1, Nombre = "Pendiente", Descripcion = "Pendiente de aprobación" },
+                new EstadoCliente { Id = 2, Nombre = "Activo", Descripcion = "Cliente activo" },
+                new EstadoCliente { Id = 3, Nombre = "Inactivo", Descripcion = "Cliente inactivo" }
+            );
         });
     }
 

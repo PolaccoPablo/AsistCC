@@ -15,7 +15,7 @@ public interface IAuthService
     Task<LoginResponse> LoginAsync(LoginRequest request);
     Task<RegisterResponse> RegisterComercioAsync(RegisterComercioRequest request);
     Task<RegisterResponse> RegisterClienteAsync(RegisterClienteRequest request);
-    string GenerateJwtTokenAsync(Usuario usuario);
+    string GenerateJwtTokenAsync(Usuario usuario, int? clienteId = null);
 }
 
 public class AuthService : IAuthService
@@ -43,7 +43,7 @@ public class AuthService : IAuthService
         {
             // Buscar usuario por email
             var usuario = await _usuarioRepository.GetByEmailAsync(request.Email);
-            
+
             if (usuario == null)
             {
                 return new LoginResponse
@@ -56,7 +56,7 @@ public class AuthService : IAuthService
 
             // Validar contraseña
             var isValidPassword = await _usuarioRepository.ValidatePasswordAsync(request.Email, request.Password);
-            
+
             if (!isValidPassword)
             {
                 return new LoginResponse
@@ -66,8 +66,38 @@ public class AuthService : IAuthService
                 };
             }
 
+            // Si es un cliente, validar que esté aprobado
+            int? clienteId = null;
+            if (usuario.Rol == "Cliente")
+            {
+                var cliente = await _clienteRepository.GetByEmailAsync(request.Email, usuario.ComercioId);
+
+                if (cliente == null)
+                {
+                    return new LoginResponse
+                    {
+                        Success = false,
+                        ErrorMessage = "No se encontró el cliente asociado a este usuario"
+                    };
+                }
+
+                // Validar que el cliente esté aprobado (EstadoId = 2)
+                if (cliente.EstadoId != 2)
+                {
+                    return new LoginResponse
+                    {
+                        Success = false,
+                        ErrorMessage = cliente.EstadoId == 1
+                            ? "Tu cuenta está pendiente de aprobación por el comercio"
+                            : "Tu cuenta ha sido inactivada. Contacta al comercio para más información"
+                    };
+                }
+
+                clienteId = cliente.Id;
+            }
+
             // Generar token JWT
-            var token = GenerateJwtTokenAsync(usuario);
+            var token = GenerateJwtTokenAsync(usuario, clienteId);
 
             // Actualizar último acceso
             await _usuarioRepository.UpdateLastAccessAsync(usuario.Id);
@@ -92,7 +122,7 @@ public class AuthService : IAuthService
         }
     }
 
-    public string GenerateJwtTokenAsync(Usuario usuario)
+    public string GenerateJwtTokenAsync(Usuario usuario, int? clienteId = null)
     {
         var jwtKey = _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
         var jwtIssuer = _configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("JWT Issuer not configured");
@@ -102,7 +132,7 @@ public class AuthService : IAuthService
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claimsList = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
             new Claim(ClaimTypes.Email, usuario.Email),
@@ -110,15 +140,21 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.Role, usuario.Rol),
             new Claim("ComercioId", usuario.ComercioId.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim(JwtRegisteredClaimNames.Iat, 
-                new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds().ToString(), 
+            new Claim(JwtRegisteredClaimNames.Iat,
+                new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
+
+        // Si es un cliente, agregar el ClienteId al token
+        if (clienteId.HasValue)
+        {
+            claimsList.Add(new Claim("ClienteId", clienteId.Value.ToString()));
+        }
 
         var token = new JwtSecurityToken(
             issuer: jwtIssuer,
             audience: jwtAudience,
-            claims: claims,
+            claims: claimsList,
             expires: DateTime.UtcNow.AddHours(jwtExpiryHours),
             signingCredentials: credentials
         );
@@ -223,7 +259,43 @@ public class AuthService : IAuthService
                 };
             }
 
-            // Crear el cliente
+            // Validar que se proporcionó la contraseña
+            if (string.IsNullOrWhiteSpace(request.Password))
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "La contraseña es requerida para el registro"
+                };
+            }
+
+            // Validar que no exista un usuario con este email
+            var usuarioExistente = await _usuarioRepository.GetByEmailAsync(request.Email);
+            if (usuarioExistente != null)
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Ya existe un usuario registrado con este email"
+                };
+            }
+
+            // Crear usuario con rol Cliente
+            var usuario = new Usuario
+            {
+                Nombre = request.Nombre,
+                Apellido = request.Apellido,
+                Email = request.Email,
+                PasswordHash = HashPassword(request.Password),
+                Rol = "Cliente",
+                ComercioId = request.ComercioId,
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            };
+
+            usuario = await _usuarioRepository.CreateAsync(usuario);
+
+            // Crear el cliente vinculado al usuario
             var cliente = new Cliente
             {
                 Nombre = request.Nombre,
@@ -233,21 +305,21 @@ public class AuthService : IAuthService
                 Direccion = request.Direccion,
                 DNI = request.DNI,
                 ComercioId = request.ComercioId,
+                UsuarioId = usuario.Id, // Vincular con el usuario
+                EstadoId = 1, // Pendiente de aprobación
+                OrigenRegistro = 2, // Autogestión
                 FechaCreacion = DateTime.UtcNow,
                 Activo = true
             };
 
             cliente = await _clienteRepository.CreateAsync(cliente);
 
-            // Si se proporcionó password, crear credenciales de acceso
-            // TODO: Implementar sistema de credenciales para clientes si se requiere
-            string token = string.Empty;
-
+            // NO se genera token porque el cliente debe ser aprobado primero
             return new RegisterResponse
             {
                 Success = true,
-                Message = "Cliente registrado exitosamente",
-                Token = token,
+                Message = "Registro exitoso. Tu cuenta está pendiente de aprobación por el comercio.",
+                Token = string.Empty,
                 ComercioId = request.ComercioId,
                 ClienteId = cliente.Id
             };

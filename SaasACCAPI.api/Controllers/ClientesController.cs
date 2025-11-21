@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SaasACC.Application.Services;
 using SaasACC.Model.DTOs;
-using System.Security.Claims;
 
 namespace SaasACCAPI.api.Controllers;
 
@@ -30,6 +29,7 @@ public class ClientesController : ControllerBase
         {
             var comercioId = GetComercioIdFromToken();
             var clientes = await _clienteService.GetAllClientesAsync(comercioId);
+
             return Ok(clientes);
         }
         catch (UnauthorizedAccessException ex)
@@ -85,7 +85,7 @@ public class ClientesController : ControllerBase
             }
 
             var comercioId = GetComercioIdFromToken();
-            
+
             var request = new CreateClienteRequest
             {
                 Nombre = clienteDto.Nombre,
@@ -197,7 +197,7 @@ public class ClientesController : ControllerBase
     private int GetComercioIdFromToken()
     {
         // Intentar obtener ComercioId del claim (varios nombres posibles)
-        var comercioIdClaim = User.FindFirst("ComercioId")?.Value 
+        var comercioIdClaim = User.FindFirst("ComercioId")?.Value
             ?? User.FindFirst(c => c.Type == "ComercioId")?.Value
             ?? User.FindFirst(c => c.Type.EndsWith("/ComercioId", StringComparison.OrdinalIgnoreCase))?.Value;
 
