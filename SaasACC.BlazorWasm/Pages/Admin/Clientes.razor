@@ -16,16 +16,38 @@
 <MudCard>
     <MudCardContent>
         <MudGrid>
-            <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="searchString" 
-                             Placeholder="Buscar cliente..." 
-                             Adornment="Adornment.Start" 
-                             AdornmentIcon="@Icons.Material.Filled.Search" 
-                             IconSize="Size.Medium" />
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="searchString"
+                             Placeholder="Buscar cliente..."
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             IconSize="Size.Medium"
+                             Immediate="true"
+                             DebounceInterval="300"
+                             OnDebounceIntervalElapsed="FilterClientes" />
             </MudItem>
-            <MudItem xs="12" md="6" Class="d-flex justify-end">
-                <MudButton Variant="Variant.Filled" 
-                          Color="Color.Primary" 
+            <MudItem xs="12" md="3">
+                <MudSelect T="int?" @bind-Value="selectedEstadoId"
+                          Label="Filtrar por Estado"
+                          Clearable="true"
+                          AdornmentIcon="@Icons.Material.Filled.FilterList"
+                          Adornment="Adornment.Start">
+                    <MudSelectItem T="int?" Value="null">Todos</MudSelectItem>
+                    <MudSelectItem T="int?" Value="1">Pendientes</MudSelectItem>
+                    <MudSelectItem T="int?" Value="2">Activos</MudSelectItem>
+                    <MudSelectItem T="int?" Value="3">Inactivos</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="5" Class="d-flex justify-end align-center">
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Warning"
+                          StartIcon="@Icons.Material.Filled.HourglassEmpty"
+                          OnClick="@(() => Navigation.NavigateTo("/admin/clientes-pendientes"))"
+                          Class="mr-2">
+                    Ver Pendientes
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
                           StartIcon="@Icons.Material.Filled.Add"
                           OnClick="OpenCreateDialog">
                     Nuevo Cliente
@@ -42,34 +64,68 @@
             <HeaderContent>
                 <MudTh>Nombre</MudTh>
                 <MudTh>Email</MudTh>
-                <MudTh>Teléfono</MudTh>
-                <MudTh>DNI</MudTh>
+                <MudTh>Estado</MudTh>
+                <MudTh>Origen</MudTh>
                 <MudTh>Saldo</MudTh>
                 <MudTh>Acciones</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Nombre">@context.NombreCompleto</MudTd>
                 <MudTd DataLabel="Email">@context.Email</MudTd>
-                <MudTd DataLabel="Teléfono">@context.Telefono</MudTd>
-                <MudTd DataLabel="DNI">@context.DNI</MudTd>
-                <MudTd DataLabel="Saldo">
-                    <MudChip T="int" Color="@(GetSaldoColor(context.CuentaCorriente?.Saldo ?? 0))" 
-                             Size="Size.Small">
-                        $@((context.CuentaCorriente?.Saldo ?? 0).ToString("N2"))
+                <MudTd DataLabel="Estado">
+                    <MudChip T="string" Color="@GetEstadoColor(context.EstadoId)" Size="Size.Small">
+                        @context.EstadoNombre
                     </MudChip>
                 </MudTd>
+                <MudTd DataLabel="Origen">
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Outlined">
+                        @context.OrigenRegistroNombre
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Saldo">
+                    @if (context.CuentaCorriente != null)
+                    {
+                        <MudChip T="int" Color="@(GetSaldoColor(context.CuentaCorriente.Saldo))"
+                                 Size="Size.Small">
+                            $@(context.CuentaCorriente.Saldo.ToString("N2"))
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Sin cuenta</MudText>
+                    }
+                </MudTd>
                 <MudTd DataLabel="Acciones">
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" 
-                                   Size="Size.Small"
-                                   OnClick="@(() => OpenEditDialog(context))" />
-                    <MudIconButton Icon="@Icons.Material.Filled.Receipt" 
-                                   Size="Size.Small"
-                                   Color="Color.Info"
-                                   OnClick="@(() => VerCuentaCorriente(context))" />
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
-                                   Size="Size.Small"
-                                   Color="Color.Error"
-                                   OnClick="@(() => DeleteCliente(context))" />
+                    @if (context.EstadoId == 1)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                       Size="Size.Small"
+                                       Color="Color.Success"
+                                       Title="Aprobar"
+                                       OnClick="@(() => AprobarCliente(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       Title="Rechazar"
+                                       OnClick="@(() => RechazarCliente(context))" />
+                    }
+                    else
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       OnClick="@(() => OpenEditDialog(context))" />
+                        @if (context.CuentaCorriente != null)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Receipt"
+                                           Size="Size.Small"
+                                           Color="Color.Info"
+                                           OnClick="@(() => VerCuentaCorriente(context))" />
+                        }
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="@(() => DeleteCliente(context))" />
+                    }
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
@@ -86,6 +142,8 @@
     private List<ClienteDto> clientes = new();
     private List<ClienteDto> filteredClientes = new();
     private string searchString = "";
+    private int? selectedEstadoId = null;
+    private int? previousEstadoId = null;
     private bool loading = true;
 
     protected override async Task OnInitializedAsync()
@@ -93,12 +151,26 @@
         await LoadClientes();
     }
 
+    protected override async Task OnParametersSetAsync()
+    {
+        // Recargar cuando cambia el filtro de estado
+        if (selectedEstadoId != previousEstadoId)
+        {
+            previousEstadoId = selectedEstadoId;
+            await LoadClientes();
+        }
+    }
+
     private async Task LoadClientes()
     {
         loading = true;
         try
         {
-            var response = await Http.GetAsync("api/clientes");
+            var url = selectedEstadoId.HasValue
+                ? $"api/clientes?estadoId={selectedEstadoId.Value}"
+                : "api/clientes";
+
+            var response = await Http.GetAsync(url);
             if (response.IsSuccessStatusCode)
             {
                 clientes = await response.Content.ReadFromJsonAsync<List<ClienteDto>>() ?? new();
@@ -128,7 +200,7 @@
         }
         else
         {
-            filteredClientes = clientes.Where(c => 
+            filteredClientes = clientes.Where(c =>
                 c.Nombre.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
                 c.Apellido.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
                 c.Email.Contains(searchString, StringComparison.OrdinalIgnoreCase) ||
@@ -140,6 +212,77 @@
     private Color GetSaldoColor(decimal saldo)
     {
         return saldo >= 0 ? Color.Success : Color.Error;
+    }
+
+    private Color GetEstadoColor(int estadoId)
+    {
+        return estadoId switch
+        {
+            1 => Color.Warning,  // Pendiente
+            2 => Color.Success,  // Activo
+            3 => Color.Default,  // Inactivo
+            _ => Color.Default
+        };
+    }
+
+    private async Task AprobarCliente(ClienteDto cliente)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Aprobar Cliente",
+            $"¿Está seguro de que desea aprobar a {cliente.NombreCompleto}? Esto creará su cuenta corriente y le permitirá acceder al sistema.",
+            yesText: "Aprobar", cancelText: "Cancelar");
+
+        if (result == true)
+        {
+            try
+            {
+                var response = await Http.PostAsync($"api/clientes/{cliente.Id}/aprobar", null);
+                if (response.IsSuccessStatusCode)
+                {
+                    Snackbar.Add("Cliente aprobado correctamente", Severity.Success);
+                    await LoadClientes();
+                }
+                else
+                {
+                    var errorMessage = await response.Content.ReadAsStringAsync();
+                    Snackbar.Add($"Error al aprobar cliente: {errorMessage}", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error al aprobar cliente: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task RechazarCliente(ClienteDto cliente)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Rechazar Cliente",
+            $"¿Está seguro de que desea rechazar a {cliente.NombreCompleto}? Esta acción marcará la cuenta como inactiva.",
+            yesText: "Rechazar", cancelText: "Cancelar");
+
+        if (result == true)
+        {
+            try
+            {
+                var response = await Http.PostAsync($"api/clientes/{cliente.Id}/rechazar", null);
+                if (response.IsSuccessStatusCode)
+                {
+                    Snackbar.Add("Cliente rechazado", Severity.Info);
+                    await LoadClientes();
+                }
+                else
+                {
+                    var errorMessage = await response.Content.ReadAsStringAsync();
+                    Snackbar.Add($"Error al rechazar cliente: {errorMessage}", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error al rechazar cliente: {ex.Message}", Severity.Error);
+            }
+        }
     }
 
     private async Task OpenCreateDialog()

@@ -4,6 +4,7 @@ using SaasACC.Model.Entities;
 using SaasACC.Model.Servicios.Login;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 
@@ -12,17 +13,28 @@ namespace SaasACC.Application.Services;
 public interface IAuthService
 {
     Task<LoginResponse> LoginAsync(LoginRequest request);
-    string GenerateJwtTokenAsync(Usuario usuario);
+    Task<RegisterResponse> RegisterComercioAsync(RegisterComercioRequest request);
+    Task<RegisterResponse> RegisterClienteAsync(RegisterClienteRequest request);
+    Task<ChangePasswordResponse> ChangePasswordAsync(int usuarioId, ChangePasswordRequest request);
+    string GenerateJwtTokenAsync(Usuario usuario, int? clienteId = null);
 }
 
 public class AuthService : IAuthService
 {
     private readonly IUsuarioRepository _usuarioRepository;
+    private readonly IComercioRepository _comercioRepository;
+    private readonly IClienteRepository _clienteRepository;
     private readonly IConfiguration _configuration;
 
-    public AuthService(IUsuarioRepository usuarioRepository, IConfiguration configuration)
+    public AuthService(
+        IUsuarioRepository usuarioRepository,
+        IComercioRepository comercioRepository,
+        IClienteRepository clienteRepository,
+        IConfiguration configuration)
     {
         _usuarioRepository = usuarioRepository;
+        _comercioRepository = comercioRepository;
+        _clienteRepository = clienteRepository;
         _configuration = configuration;
     }
 
@@ -32,7 +44,7 @@ public class AuthService : IAuthService
         {
             // Buscar usuario por email
             var usuario = await _usuarioRepository.GetByEmailAsync(request.Email);
-            
+
             if (usuario == null)
             {
                 return new LoginResponse
@@ -45,7 +57,7 @@ public class AuthService : IAuthService
 
             // Validar contraseña
             var isValidPassword = await _usuarioRepository.ValidatePasswordAsync(request.Email, request.Password);
-            
+
             if (!isValidPassword)
             {
                 return new LoginResponse
@@ -55,11 +67,55 @@ public class AuthService : IAuthService
                 };
             }
 
-            // Generar token JWT
-            var token = GenerateJwtTokenAsync(usuario);
+            // Si es un cliente, validar que esté aprobado
+            int? clienteId = null;
+            bool requiereCambioPassword = false;
 
-            // Actualizar último acceso
-            await _usuarioRepository.UpdateLastAccessAsync(usuario.Id);
+            if (usuario.Rol == "Cliente")
+            {
+                var cliente = await _clienteRepository.GetByEmailAsync(request.Email, usuario.ComercioId);
+
+                if (cliente == null)
+                {
+                    return new LoginResponse
+                    {
+                        Success = false,
+                        ErrorMessage = "No se encontró el cliente asociado a este usuario"
+                    };
+                }
+
+                // Validar que el cliente esté aprobado (EstadoId = 2)
+                if (cliente.EstadoId != 2)
+                {
+                    return new LoginResponse
+                    {
+                        Success = false,
+                        ErrorMessage = cliente.EstadoId == 1
+                            ? "Tu cuenta está pendiente de aprobación por el comercio"
+                            : "Tu cuenta ha sido inactivada. Contacta al comercio para más información"
+                    };
+                }
+
+                clienteId = cliente.Id;
+
+                // Verificar si requiere cambio de contraseña:
+                // - Nunca ha iniciado sesión (UltimoAcceso == null)
+                // - Fue creado desde administración (OrigenRegistro == 1)
+                if (usuario.UltimoAcceso == null && cliente.OrigenRegistro == 1)
+                {
+                    requiereCambioPassword = true;
+                }
+            }
+
+            // Generar token JWT
+            var token = GenerateJwtTokenAsync(usuario, clienteId);
+
+            // Actualizar último acceso solo si no requiere cambio de contraseña
+            // (se actualizará después del cambio de contraseña)
+            if (!requiereCambioPassword)
+            {
+                await _usuarioRepository.UpdateLastAccessAsync(usuario.Id);
+            }
 
             return new LoginResponse
             {
@@ -68,7 +124,8 @@ public class AuthService : IAuthService
                 Role = usuario.Rol,
                 ComercioId = usuario.ComercioId,
                 UserName = usuario.Nombre,
-                ErrorMessage = string.Empty
+                ErrorMessage = string.Empty,
+                RequiereCambioPassword = requiereCambioPassword
             };
         }
         catch (Exception ex)
@@ -81,7 +138,7 @@ public class AuthService : IAuthService
         }
     }
 
-    public string GenerateJwtTokenAsync(Usuario usuario)
+    public string GenerateJwtTokenAsync(Usuario usuario, int? clienteId = null)
     {
         var jwtKey = _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
         var jwtIssuer = _configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("JWT Issuer not configured");
@@ -91,7 +148,7 @@ public class AuthService : IAuthService
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claimsList = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
             new Claim(ClaimTypes.Email, usuario.Email),
@@ -99,19 +156,275 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.Role, usuario.Rol),
             new Claim("ComercioId", usuario.ComercioId.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim(JwtRegisteredClaimNames.Iat, 
-                new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds().ToString(), 
+            new Claim(JwtRegisteredClaimNames.Iat,
+                new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
+
+        // Si es un cliente, agregar el ClienteId al token
+        if (clienteId.HasValue)
+        {
+            claimsList.Add(new Claim("ClienteId", clienteId.Value.ToString()));
+        }
 
         var token = new JwtSecurityToken(
             issuer: jwtIssuer,
             audience: jwtAudience,
-            claims: claims,
+            claims: claimsList,
             expires: DateTime.UtcNow.AddHours(jwtExpiryHours),
             signingCredentials: credentials
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public async Task<RegisterResponse> RegisterComercioAsync(RegisterComercioRequest request)
+    {
+        try
+        {
+            // Validar que no exista el email del comercio
+            if (await _comercioRepository.EmailExistsAsync(request.EmailComercio))
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Ya existe un comercio registrado con este email"
+                };
+            }
+
+            // Validar que no exista el email del administrador
+            var adminExists = await _usuarioRepository.GetByEmailAsync(request.EmailAdmin);
+            if (adminExists != null)
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Ya existe un usuario registrado con este email"
+                };
+            }
+
+            // Crear el comercio
+            var comercio = new Comercio
+            {
+                Nombre = request.NombreComercio,
+                Email = request.EmailComercio,
+                Telefono = request.TelefonoComercio,
+                Direccion = request.DireccionComercio,
+                NotificacionesEmail = true,
+                NotificacionesWhatsApp = false,
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            };
+
+            comercio = await _comercioRepository.CreateAsync(comercio);
+
+            // Crear el usuario administrador
+            var usuario = new Usuario
+            {
+                Nombre = request.NombreAdmin,
+                Email = request.EmailAdmin,
+                PasswordHash = HashPassword(request.Password),
+                Rol = "Admin",
+                ComercioId = comercio.Id
+            };
+
+            usuario = await _usuarioRepository.CreateAsync(usuario);
+
+            // Generar token JWT
+            var token = GenerateJwtTokenAsync(usuario);
+
+            return new RegisterResponse
+            {
+                Success = true,
+                Message = "Comercio registrado exitosamente",
+                Token = token,
+                ComercioId = comercio.Id
+            };
+        }
+        catch (Exception ex)
+        {
+            return new RegisterResponse
+            {
+                Success = false,
+                ErrorMessage = $"Error al registrar comercio: {ex.Message}"
+            };
+        }
+    }
+
+    public async Task<RegisterResponse> RegisterClienteAsync(RegisterClienteRequest request)
+    {
+        try
+        {
+            // Validar que el comercio existe
+            if (!await _comercioRepository.ExistsAsync(request.ComercioId))
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "El comercio seleccionado no existe"
+                };
+            }
+
+            // Validar que no exista el email del cliente en este comercio
+            if (await _clienteRepository.EmailExistsAsync(request.Email, request.ComercioId))
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Ya existe un cliente con este email en el comercio seleccionado"
+                };
+            }
+
+            // Validar que se proporcionó la contraseña
+            if (string.IsNullOrWhiteSpace(request.Password))
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "La contraseña es requerida para el registro"
+                };
+            }
+
+            // Validar que no exista un usuario con este email
+            var usuarioExistente = await _usuarioRepository.GetByEmailAsync(request.Email);
+            if (usuarioExistente != null)
+            {
+                return new RegisterResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Ya existe un usuario registrado con este email"
+                };
+            }
+
+            // Crear usuario con rol Cliente
+            var usuario = new Usuario
+            {
+                Nombre = request.Nombre,
+                Apellido = request.Apellido,
+                Email = request.Email,
+                PasswordHash = HashPassword(request.Password),
+                Rol = "Cliente",
+                ComercioId = request.ComercioId,
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            };
+
+            usuario = await _usuarioRepository.CreateAsync(usuario);
+
+            // Crear el cliente vinculado al usuario
+            var cliente = new Cliente
+            {
+                Nombre = request.Nombre,
+                Apellido = request.Apellido,
+                Email = request.Email,
+                Telefono = request.Telefono,
+                Direccion = request.Direccion,
+                DNI = request.DNI,
+                ComercioId = request.ComercioId,
+                UsuarioId = usuario.Id, // Vincular con el usuario
+                EstadoId = 1, // Pendiente de aprobación
+                OrigenRegistro = 2, // Autogestión
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+            };
+
+            cliente = await _clienteRepository.CreateAsync(cliente);
+
+            // NO se genera token porque el cliente debe ser aprobado primero
+            return new RegisterResponse
+            {
+                Success = true,
+                Message = "Registro exitoso. Tu cuenta está pendiente de aprobación por el comercio.",
+                Token = string.Empty,
+                ComercioId = request.ComercioId,
+                ClienteId = cliente.Id
+            };
+        }
+        catch (Exception ex)
+        {
+            return new RegisterResponse
+            {
+                Success = false,
+                ErrorMessage = $"Error al registrar cliente: {ex.Message}"
+            };
+        }
+    }
+
+    public async Task<ChangePasswordResponse> ChangePasswordAsync(int usuarioId, ChangePasswordRequest request)
+    {
+        try
+        {
+            // Validar que las contraseñas coincidan
+            if (request.NewPassword != request.ConfirmPassword)
+            {
+                return new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Las contraseñas no coinciden"
+                };
+            }
+
+            // Validar longitud de la nueva contraseña
+            if (request.NewPassword.Length < 6)
+            {
+                return new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "La contraseña debe tener al menos 6 caracteres"
+                };
+            }
+
+            // Obtener usuario
+            var usuario = await _usuarioRepository.GetByIdAsync(usuarioId);
+            if (usuario == null)
+            {
+                return new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Usuario no encontrado"
+                };
+            }
+
+            // Validar contraseña actual
+            var currentPasswordHash = HashPassword(request.CurrentPassword);
+            if (usuario.PasswordHash != currentPasswordHash)
+            {
+                return new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "La contraseña actual es incorrecta"
+                };
+            }
+
+            // Actualizar contraseña
+            usuario.PasswordHash = HashPassword(request.NewPassword);
+            usuario.FechaModificacion = DateTime.UtcNow;
+
+            // Actualizar último acceso (importante para marcar que ya cambió la contraseña)
+            await _usuarioRepository.UpdateLastAccessAsync(usuario.Id);
+
+            await _usuarioRepository.UpdateAsync(usuario);
+
+            return new ChangePasswordResponse
+            {
+                Success = true,
+                Message = "Contraseña actualizada correctamente"
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ChangePasswordResponse
+            {
+                Success = false,
+                ErrorMessage = $"Error al cambiar contraseña: {ex.Message}"
+            };
+        }
+    }
+
+    private static string HashPassword(string password)
+    {
+        using var sha256 = SHA256.Create();
+        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+        return Convert.ToBase64String(hashedBytes);
     }
 }

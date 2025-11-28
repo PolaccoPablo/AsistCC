@@ -4,7 +4,7 @@ namespace SaasACC.Application.Interfaces;
 
 public interface IClienteRepository
 {
-    Task<IEnumerable<Cliente>> GetAllAsync(int comercioId);
+    Task<IEnumerable<Cliente>> GetAllAsync(int comercioId, int? estadoId = null);
     Task<Cliente?> GetByIdAsync(int id);
     Task<Cliente?> GetByEmailAsync(string email, int comercioId);
     Task<Cliente> CreateAsync(Cliente cliente);
@@ -12,5 +12,6 @@ public interface IClienteRepository
     Task<bool> DeleteAsync(int id);
     Task<bool> ExistsAsync(int id);
     Task<bool> EmailExistsAsync(string email, int comercioId, int? excludeId = null);
+    Task<CuentaCorriente> CrearCuentaCorrienteAsync(int clienteId);
 }
 

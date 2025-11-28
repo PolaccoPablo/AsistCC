@@ -1,0 +1,170 @@
+@page "/admin/clientes-pendientes"
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@using SaacACC.BlazorWasm.Services
+@using SaasACC.Model.DTOs
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<MudText Typo="Typo.h4" Class="mb-4">Clientes Pendientes de Aprobación</MudText>
+
+<MudCard>
+    <MudCardContent>
+        @if (loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            <MudText Class="mt-2">Cargando...</MudText>
+        }
+        else if (!clientesPendientes.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No hay clientes pendientes de aprobación en este momento.
+            </MudAlert>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      Class="mt-4"
+                      OnClick="@(() => Navigation.NavigateTo("/admin/clientes"))">
+                Volver a Clientes
+            </MudButton>
+        }
+        else
+        {
+            <MudText Typo="Typo.body1" Class="mb-4">
+                Hay <strong>@clientesPendientes.Count</strong> cliente(s) esperando aprobación
+            </MudText>
+
+            <MudTable Items="@clientesPendientes"
+                      Dense="true"
+                      Hover="true">
+                <HeaderContent>
+                    <MudTh>Nombre</MudTh>
+                    <MudTh>Email</MudTh>
+                    <MudTh>Teléfono</MudTh>
+                    <MudTh>DNI</MudTh>
+                    <MudTh>Origen</MudTh>
+                    <MudTh>Fecha Registro</MudTh>
+                    <MudTh>Acciones</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Nombre">@context.NombreCompleto</MudTd>
+                    <MudTd DataLabel="Email">@context.Email</MudTd>
+                    <MudTd DataLabel="Teléfono">@context.Telefono</MudTd>
+                    <MudTd DataLabel="DNI">@context.DNI</MudTd>
+                    <MudTd DataLabel="Origen">
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Outlined">
+                            @context.OrigenRegistroNombre
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Fecha Registro">
+                        @context.CuentaCorriente?.FechaCreacion.ToString("dd/MM/yyyy")
+                    </MudTd>
+                    <MudTd DataLabel="Acciones">
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Success"
+                                  Size="Size.Small"
+                                  StartIcon="@Icons.Material.Filled.CheckCircle"
+                                  OnClick="@(() => AprobarCliente(context))"
+                                  Class="mr-2">
+                            Aprobar
+                        </MudButton>
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Error"
+                                  Size="Size.Small"
+                                  StartIcon="@Icons.Material.Filled.Cancel"
+                                  OnClick="@(() => RechazarCliente(context))">
+                            Rechazar
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudButton Variant="Variant.Text"
+                      Color="Color.Primary"
+                      Class="mt-4"
+                      OnClick="@(() => Navigation.NavigateTo("/admin/clientes"))">
+                Volver a Todos los Clientes
+            </MudButton>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private List<ClienteDto> clientesPendientes = new();
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClientesPendientes();
+    }
+
+    private async Task LoadClientesPendientes()
+    {
+        loading = true;
+        try
+        {
+            var response = await Http.GetAsync("api/clientes/pendientes");
+            if (response.IsSuccessStatusCode)
+            {
+                clientesPendientes = await response.Content.ReadFromJsonAsync<List<ClienteDto>>() ?? new();
+            }
+            else
+            {
+                Snackbar.Add("Error al cargar clientes pendientes", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task AprobarCliente(ClienteDto cliente)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"api/clientes/{cliente.Id}/aprobar", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"{cliente.NombreCompleto} aprobado correctamente", Severity.Success);
+                await LoadClientesPendientes();
+            }
+            else
+            {
+                var errorMessage = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Error: {errorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al aprobar: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RechazarCliente(ClienteDto cliente)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"api/clientes/{cliente.Id}/rechazar", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"{cliente.NombreCompleto} rechazado", Severity.Info);
+                await LoadClientesPendientes();
+            }
+            else
+            {
+                var errorMessage = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Error: {errorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al rechazar: {ex.Message}", Severity.Error);
+        }
+    }
+}

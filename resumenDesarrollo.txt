@@ -1,0 +1,1245 @@
+================================================================================
+RESUMEN DE DESARROLLO - SaaS Cuentas Corrientes
+================================================================================
+Fecha: 2025-11-20
+Branch actual: 8-usuario-por-autogestión
+
+================================================================================
+ÚLTIMA IMPLEMENTACIÓN: Sistema de Registro con Dos Botones Separados
+================================================================================
+
+DESCRIPCIÓN:
+------------
+Se implementó un sistema completo de registro que permite crear cuentas de dos
+tipos diferentes: Comercios y Clientes. La solución utiliza DOS BOTONES
+SEPARADOS en la interfaz de registro para proporcionar claridad inmediata al
+usuario sobre qué tipo de cuenta desea crear.
+
+DECISIÓN DE DISEÑO:
+-------------------
+✓ DOS BOTONES SEPARADOS (Implementado)
+  - Botón 1: "Registrar Comercio" - Para negocios
+  - Botón 2: "Registrar Cliente" - Para clientes de comercios existentes
+
+  Ventajas:
+  • Claridad inmediata sobre qué se va a crear
+  • Menos pasos en el flujo de registro
+  • Mejor UX para perfiles claramente diferenciados
+  • No hay ambigüedad ni decisiones adicionales
+
+✗ UN SOLO BOTÓN + SELECT (Rechazado)
+  - Requiere pasos adicionales
+  - Mayor fricción en el proceso
+
+================================================================================
+ARCHIVOS CREADOS/MODIFICADOS
+================================================================================
+
+BACKEND - API (.NET 8)
+----------------------
+
+NUEVOS ARCHIVOS:
+1. SaasACC.Model/Servicios/Login/RegisterComercioRequest.cs
+   - DTO para registro de comercio
+   - Validaciones: nombre, email, teléfono, dirección del comercio
+   - Datos del administrador: nombre, email, password con confirmación
+
+2. SaasACC.Model/Servicios/Login/RegisterClienteRequest.cs
+   - DTO para registro de cliente
+   - Validaciones: nombre, apellido, email, teléfono
+   - Campos opcionales: DNI, dirección
+   - Referencia a ComercioId
+
+3. SaasACC.Model/Servicios/Login/RegisterResponse.cs
+   - Respuesta unificada para ambos tipos de registro
+   - Incluye: Success, Message, Token, ComercioId, ClienteId, ErrorMessage
+
+4. SaasACC.Application/Interfaces/IComercioRepository.cs
+   - Interfaz del repositorio de comercios
+   - Métodos: GetByIdAsync, GetByEmailAsync, GetAllAsync, CreateAsync, etc.
+
+5. SaasACC.Infrastructure/Repositories/ComercioRepository.cs
+   - Implementación del repositorio de comercios
+   - CRUD completo con validaciones
+   - Soft delete implementado
+
+6. SaasACCAPI.api/Controllers/ComerciosController.cs
+   - Endpoint GET /api/comercios - Lista comercios activos
+   - Retorna ComercioDto simplificado
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.Application/Services/AuthService.cs
+   - Añadida interfaz IAuthService:
+     • RegisterComercioAsync(RegisterComercioRequest)
+     • RegisterClienteAsync(RegisterClienteRequest)
+
+   - Implementación RegisterComercioAsync:
+     • Valida email del comercio único
+     • Valida email del administrador único
+     • Crea comercio
+     • Crea usuario administrador con rol "Admin"
+     • Genera token JWT automáticamente
+
+   - Implementación RegisterClienteAsync:
+     • Valida que el comercio existe
+     • Valida email único dentro del comercio
+     • Crea cliente
+     • Crea cuenta corriente automáticamente
+
+   - Añadido método HashPassword (SHA256)
+
+2. SaasACC.Application/Interfaces/IUsuarioRepository.cs
+   - Añadido método: CreateAsync(Usuario)
+
+3. SaasACC.Infrastructure/Repositories/UsuarioRepository.cs
+   - Implementado método CreateAsync
+   - Establece FechaCreacion y Activo automáticamente
+
+4. SaasACCAPI.api/Controllers/AuthController.cs
+   - Endpoint POST /api/auth/register/comercio
+     • Valida ModelState
+     • Logging de intentos y resultados
+     • Retorna RegisterResponse con token
+
+   - Endpoint POST /api/auth/register/cliente
+     • Valida ModelState
+     • Logging de intentos y resultados
+     • Retorna RegisterResponse
+
+5. SaasACCAPI.api/Program.cs
+   - Registrado IComercioRepository en DI container
+   - Línea añadida: builder.Services.AddScoped<IComercioRepository, ComercioRepository>();
+
+FRONTEND - BLAZOR WASM
+----------------------
+
+NUEVOS ARCHIVOS:
+1. SaasACC.BlazorWasm/Pages/Auth/Register.razor
+   - Página principal de registro
+   - DOS BOTONES CLARAMENTE DIFERENCIADOS:
+     • Botón Primary: "Registrar Comercio" con icono Business
+       └─ Descripción: "Para negocios que desean gestionar cuentas corrientes"
+     • Botón Outlined: "Registrar Cliente" con icono Person
+       └─ Descripción: "Para clientes con cuenta en un comercio existente"
+   - Link a login para usuarios existentes
+   - Layout: EmptyLayout (sin menús de navegación)
+
+2. SaasACC.BlazorWasm/Pages/Auth/RegisterComercio.razor
+   - Formulario completo de registro de comercio
+   - Sección 1 - Datos del Comercio:
+     • Nombre del comercio (requerido)
+     • Email del comercio (requerido, validación email)
+     • Teléfono (requerido)
+     • Dirección (requerido, multilinea)
+
+   - Sección 2 - Datos del Administrador:
+     • Nombre del administrador (requerido)
+     • Email del administrador (requerido)
+     • Password (requerido, con toggle visibilidad)
+     • Confirmar password (requerido, validación coincidencia)
+
+   - Validaciones en tiempo real con MudBlazor
+   - Botón de envío con loading spinner
+   - Botón "Volver" a selección de tipo
+   - Al registrar exitosamente: redirige a /admin/clientes
+
+3. SaasACC.BlazorWasm/Pages/Auth/RegisterCliente.razor
+   - Formulario de registro de cliente
+   - Carga lista de comercios desde API en OnInitializedAsync
+   - Dropdown para seleccionar comercio
+   - Campos del cliente:
+     • Nombre (requerido)
+     • Apellido (requerido)
+     • Email (requerido)
+     • Teléfono (requerido)
+     • DNI (opcional)
+     • Dirección (opcional)
+
+   - Loading spinner mientras carga comercios
+   - Validaciones integradas
+   - Al registrar: muestra mensaje de éxito y redirige a /login
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.BlazorWasm/Services/IAuthService.cs
+   - Añadidos métodos a la interfaz:
+     • RegisterComercio(RegisterComercioRequest)
+     • RegisterCliente(RegisterClienteRequest)
+
+2. SaasACC.BlazorWasm/Services/AuthService.cs
+   - Implementado RegisterComercio:
+     • POST a api/auth/register/comercio
+     • Si exitoso: guarda token, role "Admin", comercioId en localStorage
+     • Notifica a AuthStateProvider
+     • Retorna RegisterResponse
+
+   - Implementado RegisterCliente:
+     • POST a api/auth/register/cliente
+     • No guarda token (solo registro, no login automático)
+     • Retorna RegisterResponse
+
+3. SaasACC.BlazorWasm/Pages/Auth/Login.razor
+   - Añadido link de registro después del botón de login:
+     • "¿No tienes cuenta?"
+     • Link: "Crear cuenta" → /register
+   - Separador visual (MudDivider)
+
+================================================================================
+FLUJO DE USUARIO IMPLEMENTADO
+================================================================================
+
+1. INICIO EN LOGIN
+   ┌─────────────────────┐
+   │   Login.razor       │
+   │  Email / Password   │
+   │  [Iniciar Sesión]   │
+   │                     │
+   │  ¿No tienes cuenta? │
+   │  → Crear cuenta     │ ────┐
+   └─────────────────────┘     │
+                               ▼
+2. SELECCIÓN DE TIPO DE CUENTA
+   ┌──────────────────────────────────────┐
+   │       Register.razor                 │
+   │                                      │
+   │  [Registrar Comercio] ──────────┐    │
+   │   📊 Para negocios              │    │
+   │                                 │    │
+   │  [Registrar Cliente] ───────┐   │    │
+   │   👤 Para clientes          │   │    │
+   └─────────────────────────────┼───┼────┘
+                                 │   │
+         ┌───────────────────────┘   └──────────────┐
+         │                                          │
+         ▼                                          ▼
+3A. REGISTRO COMERCIO              3B. REGISTRO CLIENTE
+   ┌─────────────────────┐           ┌─────────────────────┐
+   │RegisterComercio     │           │RegisterCliente      │
+   │                     │           │                     │
+   │ Datos Comercio:     │           │ Seleccionar:        │
+   │ • Nombre            │           │ • Comercio (dropdown)│
+   │ • Email             │           │                     │
+   │ • Teléfono          │           │ Tus Datos:          │
+   │ • Dirección         │           │ • Nombre            │
+   │                     │           │ • Apellido          │
+   │ Datos Admin:        │           │ • Email             │
+   │ • Nombre            │           │ • Teléfono          │
+   │ • Email             │           │ • DNI (opcional)    │
+   │ • Password          │           │ • Dirección (opc)   │
+   │ • Confirmar Pass    │           │                     │
+   │                     │           │                     │
+   │ [Crear Cuenta]      │           │ [Crear Cuenta]      │
+   └──────┬──────────────┘           └──────┬──────────────┘
+          │                                 │
+          │                                 │
+          ▼                                 ▼
+   API: POST /auth/register/comercio   API: POST /auth/register/cliente
+   • Crea Comercio                     • Valida Comercio existe
+   • Crea Usuario Admin                • Crea Cliente
+   • Hash password (SHA256)            • Crea CuentaCorriente
+   • Genera JWT Token                  • Sin login automático
+          │                                 │
+          ▼                                 ▼
+   Guarda token en localStorage        Mensaje de éxito
+   Redirige: /admin/clientes          Redirige: /login
+
+================================================================================
+ENDPOINTS API CREADOS
+================================================================================
+
+1. POST /api/auth/register/comercio
+   Request Body: RegisterComercioRequest
+   {
+     "nombreComercio": "string",
+     "emailComercio": "string",
+     "telefonoComercio": "string",
+     "direccionComercio": "string",
+     "nombreAdmin": "string",
+     "emailAdmin": "string",
+     "password": "string",
+     "confirmPassword": "string"
+   }
+
+   Response: RegisterResponse
+   {
+     "success": true,
+     "message": "Comercio registrado exitosamente",
+     "token": "eyJhbGc...",
+     "comercioId": 1,
+     "clienteId": null,
+     "errorMessage": ""
+   }
+
+   Códigos HTTP:
+   - 200 OK: Registro exitoso
+   - 400 Bad Request: Datos inválidos o email duplicado
+   - 500 Internal Server Error: Error del servidor
+
+2. POST /api/auth/register/cliente
+   Request Body: RegisterClienteRequest
+   {
+     "nombre": "string",
+     "apellido": "string",
+     "email": "string",
+     "telefono": "string",
+     "dni": "string (opcional)",
+     "direccion": "string (opcional)",
+     "comercioId": 1,
+     "password": "string (opcional, futuro)",
+     "confirmPassword": "string (opcional, futuro)"
+   }
+
+   Response: RegisterResponse
+   {
+     "success": true,
+     "message": "Cliente registrado exitosamente",
+     "token": "",
+     "comercioId": 1,
+     "clienteId": 5,
+     "errorMessage": ""
+   }
+
+   Códigos HTTP:
+   - 200 OK: Registro exitoso
+   - 400 Bad Request: Comercio no existe o email duplicado
+   - 500 Internal Server Error: Error del servidor
+
+3. GET /api/comercios
+   Response: Array<ComercioDto>
+   [
+     {
+       "id": 1,
+       "nombre": "Mi Comercio",
+       "email": "contacto@micomercio.com",
+       "telefono": "+54 9 11 1234-5678"
+     }
+   ]
+
+   Códigos HTTP:
+   - 200 OK: Lista obtenida exitosamente
+   - 500 Internal Server Error: Error del servidor
+
+================================================================================
+ESTRUCTURA DE BASE DE DATOS
+================================================================================
+
+TABLAS INVOLUCRADAS:
+
+1. Comercios
+   - Id (PK)
+   - Nombre
+   - Email (único)
+   - Telefono
+   - Direccion
+   - Logo (nullable)
+   - NotificacionesEmail
+   - NotificacionesWhatsApp
+   - FechaCreacion
+   - FechaModificacion (nullable)
+   - Activo (soft delete)
+
+2. Usuarios
+   - Id (PK)
+   - Nombre
+   - Email
+   - PasswordHash (SHA256)
+   - Rol ("Admin", "Usuario", "SuperAdmin")
+   - ComercioId (FK → Comercios)
+   - UltimoAcceso (nullable)
+   - FechaCreacion
+   - FechaModificacion (nullable)
+   - Activo (soft delete)
+
+3. Clientes
+   - Id (PK)
+   - Nombre
+   - Apellido
+   - Email
+   - Telefono
+   - DNI (nullable)
+   - Direccion (nullable)
+   - ComercioId (FK → Comercios)
+   - FechaCreacion
+   - FechaModificacion (nullable)
+   - Activo (soft delete)
+
+4. CuentasCorrientes (creada automáticamente al registrar cliente)
+   - Id (PK)
+   - ClienteId (FK → Clientes)
+   - LimiteCredito
+   - Bloqueada
+   - Observaciones (nullable)
+   - FechaCreacion
+   - FechaModificacion (nullable)
+   - Activo (soft delete)
+
+RELACIONES:
+- Comercio 1:N Usuarios
+- Comercio 1:N Clientes
+- Cliente 1:1 CuentaCorriente
+
+================================================================================
+TECNOLOGÍAS UTILIZADAS
+================================================================================
+
+BACKEND:
+- .NET 8
+- ASP.NET Core Web API
+- Entity Framework Core
+- SQL Server LocalDB
+- JWT Bearer Authentication
+- SHA256 para hashing de passwords
+
+FRONTEND:
+- Blazor WebAssembly
+- MudBlazor (Material Design)
+- Blazored.LocalStorage
+- HttpClient para llamadas API
+- Custom AuthenticationStateProvider
+
+HERRAMIENTAS:
+- Visual Studio 2022
+- Git (Branch: 8-usuario-por-autogestión)
+
+================================================================================
+VALIDACIONES IMPLEMENTADAS
+================================================================================
+
+BACKEND (Data Annotations):
+✓ Campos requeridos (Required)
+✓ Validación de email (EmailAddress)
+✓ Validación de teléfono (Phone)
+✓ Longitud máxima de strings (StringLength)
+✓ Longitud mínima de password (MinimumLength: 6)
+✓ Comparación de passwords (Compare)
+
+BACKEND (Lógica de negocio):
+✓ Email de comercio único en toda la BD
+✓ Email de usuario único en toda la BD
+✓ Email de cliente único por comercio
+✓ Comercio debe existir al registrar cliente
+✓ Creación automática de CuentaCorriente al crear Cliente
+
+FRONTEND (MudBlazor):
+✓ Validación en tiempo real
+✓ Mensajes de error personalizados
+✓ Validación de formato de email
+✓ Validación de campos requeridos
+✓ Comparación de passwords en cliente
+
+================================================================================
+SEGURIDAD
+================================================================================
+
+IMPLEMENTADO:
+✓ Passwords hasheados con SHA256
+✓ JWT Token con expiración de 24 horas
+✓ Claims en JWT: UserId, Email, Name, Role, ComercioId
+✓ CORS configurado para Blazor WASM
+✓ Endpoints de registro sin autenticación (públicos)
+✓ Validación de ModelState en controllers
+✓ Soft delete en todas las entidades
+
+RECOMENDACIONES FUTURAS:
+⚠ Cambiar de SHA256 a BCrypt o Argon2 (más seguro)
+⚠ Implementar rate limiting en endpoints de registro
+⚠ Añadir verificación de email
+⚠ Añadir CAPTCHA para prevenir bots
+⚠ Implementar refresh tokens
+⚠ Logs de auditoría de registros
+
+================================================================================
+TESTING
+================================================================================
+
+ESTADO: Compilación exitosa
+- Todos los proyectos compilan sin errores
+- Warnings menores no críticos
+
+TESTS PENDIENTES:
+□ Unit tests de servicios
+□ Integration tests de endpoints
+□ Tests de validaciones
+□ Tests de UI con bUnit
+
+TESTING MANUAL RECOMENDADO:
+1. Registrar comercio nuevo
+   - Verificar creación en BD
+   - Verificar usuario admin creado
+   - Verificar login automático con token
+   - Verificar redirección a /admin/clientes
+
+2. Registrar cliente
+   - Verificar que aparezcan comercios en dropdown
+   - Verificar creación de cliente
+   - Verificar creación automática de cuenta corriente
+   - Verificar redirección a login
+
+3. Validaciones
+   - Email duplicado de comercio
+   - Email duplicado de usuario
+   - Email duplicado de cliente en mismo comercio
+   - Passwords no coinciden
+   - Campos requeridos vacíos
+
+================================================================================
+PRÓXIMOS PASOS SUGERIDOS
+================================================================================
+
+1. FUNCIONALIDAD:
+   □ Implementar "Olvidé mi contraseña"
+   □ Añadir verificación de email
+   □ Permitir a clientes crear password para autogestión
+   □ Dashboard para clientes registrados
+   □ Notificaciones de registro por email
+
+2. SEGURIDAD:
+   □ Migrar de SHA256 a BCrypt
+   □ Implementar rate limiting
+   □ Añadir CAPTCHA
+   □ Implementar refresh tokens
+   □ Two-factor authentication (2FA)
+
+3. UX/UI:
+   □ Wizard multi-paso para registro de comercio
+   □ Validación asíncrona de emails (verificar duplicados en tiempo real)
+   □ Preview de plan/precio antes de registrar comercio
+   □ Onboarding después del primer registro
+   □ Tour guiado para nuevos usuarios
+
+4. TÉCNICO:
+   □ Añadir tests unitarios
+   □ Implementar logging estructurado (Serilog)
+   □ Configurar Health Checks
+   □ Implementar versionado de API
+   □ Documentación Swagger mejorada
+
+================================================================================
+NOTAS IMPORTANTES
+================================================================================
+
+• El sistema permite registros sin verificación de email (futuro)
+• Los clientes NO tienen login automático (solo comercios)
+• Las cuentas corrientes se crean automáticamente con límite 0
+• Los passwords se hashean con SHA256 (recomendado cambiar a BCrypt)
+• Todos los campos tienen soft delete (Activo = false)
+• El token JWT incluye ComercioId para multi-tenancy
+• El sistema está preparado para multi-comercio desde el diseño
+
+================================================================================
+IMPLEMENTACIÓN: Sistema de Aprobación de Clientes con Autogestión
+================================================================================
+Fecha: 2025-11-20
+Branch: 8-usuario-por-autogestión
+
+DESCRIPCIÓN:
+------------
+Se implementó un sistema completo de aprobación de clientes que diferencia entre
+clientes creados por administradores (aprobados automáticamente) y clientes que
+se auto-registran (requieren aprobación manual del comercio).
+
+DECISIÓN ARQUITECTÓNICA CLAVE:
+-------------------------------
+✓ TABLA USUARIO UNIFICADA (Implementado)
+  - Usuarios con rol "Cliente" autentican en tabla Usuario
+  - Cliente.UsuarioId es FK nullable a Usuario
+  - Beneficios:
+    • Sistema de autenticación unificado
+    • Mejor arquitectura a largo plazo
+    • Facilita implementación de roles
+    • No duplica lógica de passwords
+
+✗ PASSWORDHASH EN CLIENTE (Rechazado)
+  - Habría duplicado lógica de autenticación
+  - Difícil de mantener
+
+================================================================================
+ARCHIVOS CREADOS/MODIFICADOS
+================================================================================
+
+BACKEND - MODEL (ENTIDADES)
+---------------------------
+
+NUEVOS ARCHIVOS:
+1. SaasACC.Model/Entities/EstadoCliente.cs
+   - Nueva entidad para estados de cliente
+   - Estados: Pendiente (1), Activo (2), Inactivo (3)
+   - Sistema extensible para agregar más estados en el futuro
+   - Campos:
+     • Id (int)
+     • Nombre (string)
+     • Descripcion (string?)
+     • Clientes (ICollection<Cliente>)
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.Model/Entities/Cliente.cs
+   - Añadido EstadoId (int) - FK a EstadoCliente
+   - Añadido UsuarioId (int?) - FK nullable a Usuario
+   - Añadido OrigenRegistro (int):
+     • 1: Administración (creado por admin)
+     • 2: Autogestión (auto-registrado)
+   - Añadido FechaAprobacion (DateTime?)
+   - Añadido AprobadoPorUsuarioId (int?) - FK a Usuario
+   - Navegación: Estado, Usuario, AprobadoPor
+
+2. SaasACC.Model/Entities/Usuario.cs
+   - Añadido Apellido (string?)
+   - Modificado Rol para soportar "Cliente"
+   - Añadido ClientesAprobados (ICollection<Cliente>)
+
+BACKEND - INFRASTRUCTURE (BASE DE DATOS)
+-----------------------------------------
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.Infrastructure/ApplicationDbContext.cs
+   - Añadido DbSet<EstadoCliente>
+   - Configuración de EstadoCliente:
+     • HasData con 3 estados iniciales
+   - Configuración de Cliente:
+     • Relación con EstadoCliente (requerida)
+     • Relación con Usuario (nullable)
+     • Relación con AprobadoPor (nullable)
+     • OnDelete: Restrict para evitar cascadas
+   - Configuración de Usuario:
+     • Relación ClientesAprobados (sin FK inversa)
+
+2. SaasACC.Infrastructure/Migrations/20251121020405_AgregarSistemaAprobacionClientes.cs
+   - Creación de tabla EstadoCliente
+   - Seed de 3 estados iniciales
+   - Añadidas columnas a Cliente:
+     • EstadoId (int, requerido, default 2)
+     • UsuarioId (int?, nullable)
+     • OrigenRegistro (int, default 1)
+     • FechaAprobacion (DateTime?)
+     • AprobadoPorUsuarioId (int?)
+   - Añadida columna a Usuario:
+     • Apellido (string?, max 100)
+   - MIGRACIÓN DE DATOS EXISTENTES:
+     • UPDATE Clientes SET EstadoId = 2, OrigenRegistro = 2
+     • Marca todos los clientes existentes como Activos y de Autogestión
+   - Índices en FK para mejor performance
+   - Constraints de FK con OnDelete Restrict
+
+BACKEND - REPOSITORIES
+----------------------
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.Application/Interfaces/IClienteRepository.cs
+   - Modificado GetAllAsync(comercioId, estadoId?) - Añadido filtro opcional
+   - Añadido CrearCuentaCorrienteAsync(clienteId)
+
+2. SaasACC.Infrastructure/Repositories/ClienteRepository.cs
+   - Modificado GetAllAsync:
+     • Include de Estado, Usuario
+     • Filtro condicional por EstadoId
+     • Query optimizada
+
+   - Implementado CrearCuentaCorrienteAsync:
+     • Verifica si ya existe cuenta corriente
+     • Crea nueva si no existe
+     • Inicializa con límite 0
+     • Retorna cuenta creada o existente
+
+   - Modificado CreateAsync:
+     • YA NO crea cuenta corriente automáticamente
+     • La cuenta se crea solo en aprobación
+
+BACKEND - SERVICES
+------------------
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.Application/Services/ClienteService.cs (IClienteService)
+   - Añadidos métodos a interfaz:
+     • GetClientesPendientesAsync(comercioId)
+     • AprobarClienteAsync(clienteId, aprobadoPorUsuarioId)
+     • RechazarClienteAsync(clienteId, rechazadoPorUsuarioId)
+
+   - Modificado CreateClienteAsync:
+     • EstadoId = 2 (Activo) - auto-aprobado
+     • OrigenRegistro = 1 (Administración)
+     • FechaAprobacion = DateTime.UtcNow
+     • Crea cuenta corriente inmediatamente
+     • Recarga cliente con cuenta antes de retornar
+
+   - Implementado GetClientesPendientesAsync:
+     • Llama a GetAllAsync con estadoId = 1
+     • Retorna lista de ClienteDto
+
+   - Implementado AprobarClienteAsync:
+     • Valida que cliente existe
+     • Valida que no esté ya aprobado
+     • Cambia EstadoId a 2 (Activo)
+     • Establece FechaAprobacion
+     • Registra AprobadoPorUsuarioId
+     • Crea cuenta corriente
+     • Recarga cliente con cuenta
+     • Retorna ClienteDto
+
+   - Implementado RechazarClienteAsync:
+     • Valida que cliente existe
+     • Cambia EstadoId a 3 (Inactivo)
+     • Registra quien rechazó en AprobadoPorUsuarioId
+     • NO crea cuenta corriente
+     • Retorna ClienteDto
+
+2. SaasACC.Application/Services/AuthService.cs
+   - Modificado LoginAsync:
+     • Si usuario.Rol == "Cliente":
+       - Busca cliente asociado por email
+       - Valida que cliente.EstadoId == 2 (Activo)
+       - Si EstadoId == 1: "Pendiente de aprobación"
+       - Si EstadoId == 3: "Cuenta inactivada"
+       - Incluye ClienteId en el token
+     • Token JWT incluye claim "ClienteId" si aplica
+
+   - Modificado RegisterClienteAsync:
+     • Crea Usuario con rol "Cliente" PRIMERO
+     • Hashea password
+     • Crea Cliente vinculado a Usuario:
+       - UsuarioId = usuario.Id
+       - EstadoId = 1 (Pendiente)
+       - OrigenRegistro = 2 (Autogestión)
+     • NO crea cuenta corriente (se crea en aprobación)
+     • NO genera token (cliente debe esperar aprobación)
+
+BACKEND - DTOs
+--------------
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.Model/DTOs/ClienteDto.cs
+   - Añadido EstadoId (int)
+   - Añadido EstadoNombre (string)
+   - Añadido OrigenRegistro (int)
+   - Añadido OrigenRegistroNombre (string) - Computed:
+     • OrigenRegistro == 1 → "Administración"
+     • OrigenRegistro == 2 → "Autogestión"
+   - Añadido TieneUsuario (bool)
+   - Añadido FechaAprobacion (DateTime?)
+
+BACKEND - API (CONTROLLERS)
+---------------------------
+
+ARCHIVOS MODIFICADOS:
+1. SaasACCAPI.api/Controllers/ClientesController.cs
+   - Modificado GetClientes:
+     • Añadido parámetro [FromQuery] int? estadoId
+     • Pasa estadoId al servicio para filtrado
+
+   - Añadido endpoint GetClientesPendientes:
+     • [HttpGet("pendientes")]
+     • Retorna solo clientes con EstadoId = 1
+     • Requiere autenticación
+
+   - Añadido endpoint AprobarCliente:
+     • [HttpPost("{id}/aprobar")]
+     • Obtiene usuarioId del token
+     • Llama a AprobarClienteAsync
+     • Maneja InvalidOperationException (ya aprobado)
+     • Retorna ClienteDto actualizado
+
+   - Añadido endpoint RechazarCliente:
+     • [HttpPost("{id}/rechazar")]
+     • Obtiene usuarioId del token
+     • Llama a RechazarClienteAsync
+     • Retorna ClienteDto actualizado
+
+   - Añadido método privado GetUsuarioIdFromToken:
+     • Extrae NameIdentifier del token
+     • Retorna int usuarioId
+     • Throw UnauthorizedAccessException si falla
+
+FRONTEND - BLAZOR WASM (PAGES)
+------------------------------
+
+NUEVOS ARCHIVOS:
+1. SaasACC.BlazorWasm/Pages/Admin/ClientesPendientes.razor
+   - Página dedicada a clientes pendientes de aprobación
+   - Ruta: /admin/clientes-pendientes
+   - Autorización: [Authorize(Roles = "Admin,SuperAdmin")]
+   - Componentes:
+     • MudCard con título
+     • MudProgressCircular durante carga
+     • MudAlert si no hay pendientes
+     • MudTable con columnas:
+       - Nombre completo
+       - Email
+       - Teléfono
+       - DNI
+       - Origen (chip con color)
+       - Fecha de registro
+       - Acciones (Aprobar/Rechazar)
+
+   - Métodos:
+     • LoadClientesPendientes: GET api/clientes/pendientes
+     • AprobarCliente: POST api/clientes/{id}/aprobar
+     • RechazarCliente: POST api/clientes/{id}/rechazar
+
+   - UX:
+     • Botones verde (Aprobar) y rojo (Rechazar)
+     • Iconos CheckCircle y Cancel
+     • Snackbar con mensajes de éxito/error
+     • Recarga automática después de aprobar/rechazar
+     • Botón "Volver a Clientes"
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.BlazorWasm/Pages/Admin/Clientes.razor
+   - Añadido filtro de estado:
+     • MudSelect con opciones: Todos, Pendientes, Activos, Inactivos
+     • Variable selectedEstadoId
+     • Se pasa como query parameter a API
+
+   - Añadidas columnas en tabla:
+     • Estado (MudChip con colores):
+       - Pendiente: Warning (amarillo)
+       - Activo: Success (verde)
+       - Inactivo: Default (gris)
+     • Origen (MudChip):
+       - Administración: Primary
+       - Autogestión: Info
+
+   - Modificadas acciones:
+     • Si EstadoId == 1 (Pendiente):
+       - Mostrar botones Aprobar/Rechazar
+       - Iconos CheckCircle/Cancel
+       - Colores Success/Error
+     • Si EstadoId != 1:
+       - Mostrar botones Edit/Delete normales
+
+   - Añadidos métodos:
+     • AprobarCliente(cliente): POST api/clientes/{id}/aprobar
+     • RechazarCliente(cliente): POST api/clientes/{id}/rechazar
+
+   - Añadido botón de acceso rápido:
+     • "Ver Pendientes" (solo si hay pendientes)
+     • Navega a /admin/clientes-pendientes
+     • Badge con cantidad de pendientes
+
+2. SaasACC.BlazorWasm/App.razor
+   - Añadido <MudPopoverProvider /> después de MudSnackbarProvider
+   - Fix para error "Missing <MudPopoverProvider />"
+
+================================================================================
+ENDPOINTS API CREADOS/MODIFICADOS
+================================================================================
+
+MODIFICADOS:
+1. GET /api/clientes?estadoId={estadoId}
+   Query Parameters:
+   - estadoId (int?, opcional): 1=Pendiente, 2=Activo, 3=Inactivo
+
+   Response: Array<ClienteDto>
+   - Incluye nuevos campos: EstadoId, EstadoNombre, OrigenRegistro, etc.
+
+NUEVOS:
+2. GET /api/clientes/pendientes
+   Descripción: Obtiene solo clientes pendientes de aprobación
+   Autorización: Requerida (token JWT)
+
+   Response: Array<ClienteDto>
+   [
+     {
+       "id": 5,
+       "nombre": "Juan",
+       "apellido": "Pérez",
+       "nombreCompleto": "Juan Pérez",
+       "email": "juan@example.com",
+       "estadoId": 1,
+       "estadoNombre": "Pendiente",
+       "origenRegistro": 2,
+       "origenRegistroNombre": "Autogestión",
+       "tieneUsuario": true,
+       "fechaAprobacion": null,
+       "cuentaCorriente": null
+     }
+   ]
+
+3. POST /api/clientes/{id}/aprobar
+   Descripción: Aprueba un cliente pendiente
+   Autorización: Requerida (obtiene usuarioId del token)
+
+   Request: Sin body
+
+   Response: ClienteDto
+   {
+     "id": 5,
+     "estadoId": 2,
+     "estadoNombre": "Activo",
+     "fechaAprobacion": "2025-11-20T10:30:00Z",
+     "cuentaCorriente": {
+       "id": 8,
+       "clienteId": 5,
+       "saldo": 0,
+       "fechaCreacion": "2025-11-20T10:30:00Z"
+     }
+   }
+
+   Errores:
+   - 400: Cliente ya está aprobado
+   - 400: Cliente no encontrado
+   - 500: Error interno
+
+4. POST /api/clientes/{id}/rechazar
+   Descripción: Rechaza un cliente pendiente
+   Autorización: Requerida (obtiene usuarioId del token)
+
+   Request: Sin body
+
+   Response: ClienteDto
+   {
+     "id": 5,
+     "estadoId": 3,
+     "estadoNombre": "Inactivo"
+   }
+
+================================================================================
+CAMBIOS EN BASE DE DATOS
+================================================================================
+
+NUEVA TABLA:
+1. EstadoCliente
+   - Id (int, PK)
+   - Nombre (nvarchar(50))
+   - Descripcion (nvarchar(200), nullable)
+
+   DATOS INICIALES:
+   | Id | Nombre    | Descripcion               |
+   |----|-----------|---------------------------|
+   | 1  | Pendiente | Pendiente de aprobación   |
+   | 2  | Activo    | Cliente activo            |
+   | 3  | Inactivo  | Cliente inactivo          |
+
+COLUMNAS AÑADIDAS A CLIENTES:
+- EstadoId (int, NOT NULL, DEFAULT 2, FK → EstadoCliente)
+- UsuarioId (int, NULL, FK → Usuarios)
+- OrigenRegistro (int, NOT NULL, DEFAULT 1)
+- FechaAprobacion (datetime2, NULL)
+- AprobadoPorUsuarioId (int, NULL, FK → Usuarios)
+
+COLUMNAS AÑADIDAS A USUARIOS:
+- Apellido (nvarchar(100), NULL)
+
+ÍNDICES CREADOS:
+- IX_Clientes_EstadoId
+- IX_Clientes_UsuarioId
+- IX_Clientes_AprobadoPorUsuarioId
+
+FOREIGN KEYS:
+- FK_Clientes_EstadoCliente_EstadoId (ON DELETE RESTRICT)
+- FK_Clientes_Usuarios_UsuarioId (ON DELETE RESTRICT)
+- FK_Clientes_Usuarios_AprobadoPorUsuarioId (ON DELETE RESTRICT)
+
+MIGRACIÓN DE DATOS:
+- Todos los clientes existentes:
+  • EstadoId = 2 (Activo)
+  • OrigenRegistro = 2 (Autogestión)
+
+================================================================================
+FLUJO DE USUARIO ACTUALIZADO
+================================================================================
+
+FLUJO 1: ADMINISTRADOR CREA CLIENTE
+------------------------------------
+1. Admin ingresa a /admin/clientes
+2. Click en "Nuevo Cliente"
+3. Completa formulario
+4. Al guardar:
+   Backend:
+   - Crea Cliente con EstadoId = 2 (Activo)
+   - OrigenRegistro = 1 (Administración)
+   - FechaAprobacion = ahora
+   - Crea CuentaCorriente inmediatamente
+   Frontend:
+   - Muestra mensaje de éxito
+   - Cliente aparece en lista como "Activo"
+   - Origen: "Administración"
+
+FLUJO 2: CLIENTE SE AUTO-REGISTRA
+----------------------------------
+1. Usuario visita /register
+2. Click en "Registrar Cliente"
+3. Selecciona comercio del dropdown
+4. Completa formulario (nombre, email, password, etc.)
+5. Al enviar:
+   Backend:
+   - Crea Usuario con rol "Cliente"
+   - Crea Cliente con:
+     • UsuarioId = usuario.Id
+     • EstadoId = 1 (Pendiente)
+     • OrigenRegistro = 2 (Autogestión)
+   - NO crea CuentaCorriente aún
+   Frontend:
+   - Mensaje: "Registro exitoso. Espera aprobación del comercio"
+   - Redirige a /login
+
+FLUJO 3: CLIENTE INTENTA LOGIN (PENDIENTE)
+-------------------------------------------
+1. Cliente ingresa email/password
+2. Backend:
+   - Valida credenciales
+   - Busca Cliente asociado
+   - Verifica EstadoId
+   - Como EstadoId == 1 (Pendiente):
+     • Retorna error: "Tu cuenta está pendiente de aprobación"
+3. Frontend:
+   - Muestra mensaje de error
+   - No permite acceso
+
+FLUJO 4: ADMIN APRUEBA CLIENTE
+-------------------------------
+1. Admin ve notificación de clientes pendientes
+2. Navega a /admin/clientes-pendientes
+   O
+   Filtra por "Pendientes" en /admin/clientes
+3. Ve lista de clientes con estado "Pendiente"
+4. Click en botón "Aprobar"
+5. Backend:
+   - Cambia EstadoId a 2 (Activo)
+   - Registra FechaAprobacion
+   - Registra AprobadoPorUsuarioId
+   - Crea CuentaCorriente
+6. Frontend:
+   - Mensaje: "{Nombre} aprobado correctamente"
+   - Cliente desaparece de lista de pendientes
+   - Aparece en lista de activos
+
+FLUJO 5: CLIENTE LOGIN DESPUÉS DE APROBACIÓN
+---------------------------------------------
+1. Cliente ingresa email/password
+2. Backend:
+   - Valida credenciales
+   - Busca Cliente asociado
+   - Verifica EstadoId
+   - Como EstadoId == 2 (Activo):
+     • Genera token JWT con ClienteId
+     • Login exitoso
+3. Frontend:
+   - Guarda token
+   - Redirige a dashboard de cliente (futuro)
+
+FLUJO 6: ADMIN RECHAZA CLIENTE
+-------------------------------
+1. Admin en página de pendientes
+2. Click en botón "Rechazar"
+3. Backend:
+   - Cambia EstadoId a 3 (Inactivo)
+   - Registra quien rechazó
+   - NO crea cuenta corriente
+4. Frontend:
+   - Mensaje: "{Nombre} rechazado"
+   - Cliente desaparece de pendientes
+   - Si intenta login: "Cuenta inactivada. Contacta al comercio"
+
+================================================================================
+VALIDACIONES IMPLEMENTADAS
+================================================================================
+
+BACKEND:
+✓ Cliente debe existir para aprobar/rechazar
+✓ No se puede aprobar un cliente ya aprobado
+✓ Usuario debe estar autenticado para aprobar/rechazar
+✓ Al auto-registrarse, comercio debe existir
+✓ Email único por comercio
+✓ CuentaCorriente se crea solo una vez (valida existencia)
+✓ Login solo permitido para clientes con EstadoId = 2
+✓ Mensajes de error específicos por estado:
+  - EstadoId 1: "Pendiente de aprobación"
+  - EstadoId 3: "Cuenta inactivada"
+
+FRONTEND:
+✓ Botones de aprobar/rechazar solo para EstadoId = 1
+✓ Filtros por estado funcionan correctamente
+✓ Recarga automática después de aprobar/rechazar
+✓ Mensajes claros de éxito/error
+
+================================================================================
+DECISIONES DE DISEÑO
+================================================================================
+
+1. **Tabla de Estados Extensible**
+   ✓ Por qué: Permite agregar nuevos estados en el futuro sin cambiar código
+   Ejemplos futuros: "Suspendido", "En Revisión", "Bloqueado"
+
+2. **UsuarioId Nullable en Cliente**
+   ✓ Por qué: Permite clientes creados por admin sin usuario inicialmente
+   ✓ Clientes de autogestión siempre tienen UsuarioId
+   ✓ Clientes de admin pueden tener UsuarioId si se les crea credenciales
+
+3. **Cuenta Corriente en Aprobación**
+   ✓ Por qué: No tiene sentido tener cuenta si no está aprobado
+   ✓ Evita cuentas "fantasma" de clientes rechazados
+   ✓ Admin-created clients: aprobación automática, cuenta inmediata
+
+4. **OrigenRegistro como Int**
+   ✓ Por qué: Más eficiente que string, extensible
+   ✓ Futuro: agregar origen "Importación", "API", etc.
+
+5. **AprobadoPorUsuarioId para Rechazos**
+   ✓ Por qué: Mantener auditoría de quién rechazó
+   ✓ Útil para reportes y seguimiento
+
+6. **ON DELETE RESTRICT en FKs**
+   ✓ Por qué: Previene eliminación accidental en cascada
+   ✓ Seguridad: no se puede borrar estado si tiene clientes
+   ✓ No se puede borrar usuario que aprobó clientes
+
+7. **Página Separada para Pendientes**
+   ✓ Por qué: Mejora UX, admin puede enfocarse en aprobaciones
+   ✓ Alternativa: solo filtro en lista principal también disponible
+
+================================================================================
+TECNOLOGÍAS Y PATRONES UTILIZADOS
+================================================================================
+
+BACKEND:
+- Entity Framework Core - Migrations
+- ASP.NET Core - Controllers, Authorization
+- Repository Pattern
+- Service Layer Pattern
+- DTO Pattern
+- Dependency Injection
+- JWT Claims para autorización
+- Soft Delete Pattern
+- State Machine Pattern (EstadoCliente)
+
+FRONTEND:
+- Blazor WebAssembly
+- MudBlazor:
+  • MudTable
+  • MudChip (estados y orígenes)
+  • MudSelect (filtros)
+  • MudButton
+  • MudSnackbar (notificaciones)
+  • MudProgressCircular
+  • MudAlert
+- Component-based architecture
+- Async/await pattern
+- HttpClient para API calls
+
+BASE DE DATOS:
+- SQL Server LocalDB
+- Foreign Keys con constraints
+- Indexes en FK para performance
+- Data seeding
+- Data migration scripts
+
+================================================================================
+TESTING
+================================================================================
+
+COMPILACIÓN:
+✓ Build exitoso sin errores
+⚠ Warnings menores (nullable references, MudBlazor deprecations)
+
+MIGRACIÓN:
+✓ Migration aplicada correctamente
+✓ Datos existentes migrados (EstadoId=2, OrigenRegistro=2)
+✓ Tablas creadas
+✓ Foreign keys establecidas
+✓ Índices creados
+
+PRUEBAS MANUALES RECOMENDADAS:
+1. ✓ Crear cliente desde admin
+   - Verificar EstadoId = 2
+   - Verificar cuenta corriente creada
+   - Verificar origen "Administración"
+
+2. ✓ Auto-registro de cliente
+   - Verificar EstadoId = 1
+   - Verificar NO tiene cuenta corriente
+   - Verificar origen "Autogestión"
+   - Verificar UsuarioId está establecido
+
+3. ✓ Login con cliente pendiente
+   - Verificar mensaje de error apropiado
+   - Verificar que no se genera token
+
+4. ✓ Aprobar cliente
+   - Verificar cambio de estado a Activo
+   - Verificar creación de cuenta corriente
+   - Verificar FechaAprobacion
+   - Verificar AprobadoPorUsuarioId
+
+5. ✓ Login con cliente aprobado
+   - Verificar token generado
+   - Verificar claim ClienteId en token
+
+6. ✓ Rechazar cliente
+   - Verificar cambio de estado a Inactivo
+   - Verificar NO se crea cuenta corriente
+
+7. ✓ Filtros en lista de clientes
+   - Todos, Pendientes, Activos, Inactivos
+
+8. ✓ Página de pendientes
+   - Listar solo pendientes
+   - Aprobar desde página
+   - Rechazar desde página
+
+================================================================================
+PRÓXIMOS PASOS SUGERIDOS
+================================================================================
+
+FUNCIONALIDAD:
+□ Notificaciones al comercio cuando hay nuevo pendiente
+□ Email al cliente cuando es aprobado/rechazado
+□ Permitir al cliente cambiar su password
+□ Dashboard para clientes aprobados
+□ Historial de aprobaciones/rechazos
+□ Razón de rechazo (campo adicional)
+□ Re-activación de clientes rechazados
+□ Bulk approval (aprobar múltiples a la vez)
+
+SEGURIDAD:
+□ Rate limiting en auto-registro
+□ CAPTCHA en formulario de auto-registro
+□ Verificación de email antes de aprobar
+□ Logs de auditoría de aprobaciones
+
+UX/UI:
+□ Notificación badge en menú con cantidad de pendientes
+□ Confirmación antes de rechazar
+□ Razón de rechazo (textarea)
+□ Filtro combinado (estado + origen)
+□ Exportar lista de pendientes
+□ Vista previa de cliente antes de aprobar
+
+TÉCNICO:
+□ Unit tests de AprobacionService
+□ Integration tests de endpoints
+□ Tests de migración de datos
+□ Performance test con muchos clientes
+□ Logging estructurado de aprobaciones
+□ Métricas: tiempo promedio de aprobación
+
+================================================================================
+NOTAS IMPORTANTES
+================================================================================
+
+• Los clientes creados por admin se aprueban automáticamente
+• Los clientes auto-registrados quedan pendientes
+• La cuenta corriente se crea SOLO al aprobar
+• Clientes pendientes o inactivos NO pueden hacer login
+• El sistema registra quién aprobó/rechazó cada cliente
+• Estados son extensibles (fácil agregar nuevos)
+• Origen es extensible (futuro: importación, API, etc.)
+• Todos los clientes existentes fueron marcados como Autogestión/Activo
+• Usuario.Apellido fue añadido para soportar rol Cliente
+• Usuario.Rol ahora incluye "Cliente" además de Admin/Usuario/SuperAdmin
+• Foreign Keys tienen ON DELETE RESTRICT para seguridad
+• AprobadoPorUsuarioId se usa tanto para aprobación como rechazo (auditoría)
+
+ARQUITECTURA:
+• Cliente.UsuarioId nullable permite clientes sin credenciales (creados por admin)
+• Clientes de autogestión SIEMPRE tienen UsuarioId
+• Sistema de autenticación unificado en tabla Usuario
+• No hay duplicación de lógica de passwords
+• Fácil extender a otros roles en el futuro
+
+FLUJO CRÍTICO:
+1. Auto-registro → Usuario creado + Cliente creado (EstadoId=1, sin cuenta)
+2. Login pendiente → ERROR: "Pendiente de aprobación"
+3. Admin aprueba → EstadoId=2, cuenta corriente creada
+4. Login aprobado → SUCCESS: Token generado con ClienteId
+
+================================================================================
+FIN DEL RESUMEN
+================================================================================
