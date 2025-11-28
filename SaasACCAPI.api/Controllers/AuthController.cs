@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SaasACC.Application.Services;
 using SaasACC.Model.Servicios.Login;
@@ -131,6 +132,56 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Error durante el registro de cliente: {Email}", request.Email);
             return StatusCode(500, new RegisterResponse
+            {
+                Success = false,
+                ErrorMessage = "Error interno del servidor"
+            });
+        }
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<ActionResult<ChangePasswordResponse>> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Datos de entrada inválidos"
+                });
+            }
+
+            // Obtener ID del usuario del token
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var usuarioId))
+            {
+                return Unauthorized(new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "No se pudo identificar al usuario"
+                });
+            }
+
+            _logger.LogInformation("Intento de cambio de contraseña para usuario ID: {UsuarioId}", usuarioId);
+
+            var result = await _authService.ChangePasswordAsync(usuarioId, request);
+
+            if (result.Success)
+            {
+                _logger.LogInformation("Contraseña cambiada exitosamente para usuario ID: {UsuarioId}", usuarioId);
+                return Ok(result);
+            }
+
+            _logger.LogWarning("Error al cambiar contraseña para usuario ID {UsuarioId}: {Error}", usuarioId, result.ErrorMessage);
+            return BadRequest(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error durante el cambio de contraseña");
+            return StatusCode(500, new ChangePasswordResponse
             {
                 Success = false,
                 ErrorMessage = "Error interno del servidor"

@@ -85,6 +85,26 @@
                              Label="Dirección (opcional)"
                              Variant="Variant.Outlined"
                              Lines="2"
+                             Class="mb-3" />
+
+                <MudDivider Class="my-4" />
+
+                <MudText Typo="Typo.h6" Class="mb-3">Credenciales de Acceso</MudText>
+
+                <MudTextField @bind-Value="model.Password"
+                             Label="Contraseña"
+                             Variant="Variant.Outlined"
+                             Required="true"
+                             RequiredError="La contraseña es requerida"
+                             InputType="InputType.Password"
+                             Class="mb-3" />
+
+                <MudTextField @bind-Value="model.ConfirmPassword"
+                             Label="Confirmar Contraseña"
+                             Variant="Variant.Outlined"
+                             Required="true"
+                             RequiredError="Debe confirmar la contraseña"
+                             InputType="InputType.Password"
                              Class="mb-6" />
 
                 <MudButton Variant="Variant.Filled"
@@ -156,6 +176,27 @@
         if (model.ComercioId <= 0)
         {
             Snackbar.Add("Debe seleccionar un comercio", Severity.Warning);
+            return;
+        }
+
+        // Validar que la contraseña esté presente
+        if (string.IsNullOrWhiteSpace(model.Password))
+        {
+            Snackbar.Add("La contraseña es requerida", Severity.Warning);
+            return;
+        }
+
+        // Validar longitud de contraseña
+        if (model.Password.Length < 6)
+        {
+            Snackbar.Add("La contraseña debe tener al menos 6 caracteres", Severity.Warning);
+            return;
+        }
+
+        // Validar que las contraseñas coincidan
+        if (model.Password != model.ConfirmPassword)
+        {
+            Snackbar.Add("Las contraseñas no coinciden", Severity.Warning);
             return;
         }
 

@@ -41,6 +41,16 @@ public class UsuarioRepository : IUsuarioRepository
         return usuario;
     }
 
+    public async Task<Usuario> UpdateAsync(Usuario usuario)
+    {
+        usuario.FechaModificacion = DateTime.UtcNow;
+
+        _context.Usuarios.Update(usuario);
+        await _context.SaveChangesAsync();
+
+        return usuario;
+    }
+
     public async Task<bool> ValidatePasswordAsync(string email, string password)
     {
         var usuario = await GetByEmailAsync(email);

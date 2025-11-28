@@ -7,6 +7,7 @@ namespace SaacACC.BlazorWasm.Services
         Task<LoginResponse> Login(LoginRequest loginRequest);
         Task<RegisterResponse> RegisterComercio(RegisterComercioRequest request);
         Task<RegisterResponse> RegisterCliente(RegisterClienteRequest request);
+        Task<ChangePasswordResponse> ChangePassword(ChangePasswordRequest request);
         Task Logout();
         Task<bool> IsUserAuthenticated();
         Task<string> GetUserRole();

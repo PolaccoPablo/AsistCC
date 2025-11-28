@@ -83,13 +83,21 @@
     private async Task HandleLogin()
     {
         loading = true;
-        
+
         var result = await AuthService.Login(loginModel);
-        
+
         if (result.Success)
         {
+            // Verificar si requiere cambio de contraseña
+            if (result.RequiereCambioPassword)
+            {
+                Snackbar.Add("Por seguridad, debes cambiar tu contraseña temporal", Severity.Warning);
+                Navigation.NavigateTo("/change-password");
+                return;
+            }
+
             Snackbar.Add("Inicio de sesión exitoso", Severity.Success);
-            
+
             // Redirigir según el rol
             Navigation.NavigateTo(result.Role switch
             {
@@ -102,7 +110,7 @@
         {
             Snackbar.Add(result.ErrorMessage, Severity.Error);
         }
-        
+
         loading = false;
     }
 }

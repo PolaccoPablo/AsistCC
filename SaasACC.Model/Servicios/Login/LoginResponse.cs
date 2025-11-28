@@ -9,4 +9,5 @@ public class LoginResponse
     public string UserName { get; set; } = string.Empty;
     public string ErrorMessage { get; set; } = string.Empty;
     public bool UserNotFound { get; set; } = false; // Nuevo campo para manejar usuario no encontrado
+    public bool RequiereCambioPassword { get; set; } = false; // Indica si debe cambiar la contraseña (primer login de cliente creado por admin)
 }

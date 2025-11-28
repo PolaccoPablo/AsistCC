@@ -1,6 +1,8 @@
 using SaasACC.Application.Interfaces;
 using SaasACC.Model.DTOs;
 using SaasACC.Model.Entities;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace SaasACC.Application.Services;
 
@@ -20,10 +22,12 @@ public interface IClienteService
 public class ClienteService : IClienteService
 {
     private readonly IClienteRepository _clienteRepository;
+    private readonly IUsuarioRepository _usuarioRepository;
 
-    public ClienteService(IClienteRepository clienteRepository)
+    public ClienteService(IClienteRepository clienteRepository, IUsuarioRepository usuarioRepository)
     {
         _clienteRepository = clienteRepository;
+        _usuarioRepository = usuarioRepository;
     }
 
     public async Task<IEnumerable<ClienteDto>> GetAllClientesAsync(int comercioId, int? estadoId = null)
@@ -40,20 +44,51 @@ public class ClienteService : IClienteService
 
     public async Task<ClienteDto> CreateClienteAsync(CreateClienteRequest request)
     {
-        // Validar que el email no exista
+        // Validar que el email no exista como cliente
         if (await _clienteRepository.EmailExistsAsync(request.Email, request.ComercioId))
         {
             throw new InvalidOperationException($"Ya existe un cliente con el email {request.Email}");
         }
 
+        // Validar que el email no exista como usuario
+        var usuarioExistente = await _usuarioRepository.GetByEmailAsync(request.Email);
+        if (usuarioExistente != null)
+        {
+            throw new InvalidOperationException($"Ya existe un usuario con el email {request.Email}");
+        }
+
+        // Validar que se haya proporcionado el DNI (se usará como contraseña temporal)
+        if (string.IsNullOrWhiteSpace(request.DNI))
+        {
+            throw new InvalidOperationException("El DNI es requerido para crear un cliente desde la administración");
+        }
+
+        // Crear el usuario primero con contraseña temporal = DNI
+        var usuario = new Usuario
+        {
+            Nombre = request.Nombre,
+            Apellido = request.Apellido,
+            Email = request.Email,
+            PasswordHash = HashPassword(request.DNI),
+            Rol = "Cliente",
+            ComercioId = request.ComercioId,
+            FechaCreacion = DateTime.UtcNow,
+            Activo = true
+            // UltimoAcceso queda null, indicando que nunca ha iniciado sesión
+        };
+
+        usuario = await _usuarioRepository.CreateAsync(usuario);
+
+        // Crear el cliente vinculado al usuario
         var cliente = new Cliente
         {
             Nombre = request.Nombre,
             Apellido = request.Apellido,
             Email = request.Email,
             Telefono = request.Telefono ?? string.Empty,
-            DNI = request.DNI ?? string.Empty,
+            DNI = request.DNI,
             ComercioId = request.ComercioId,
+            UsuarioId = usuario.Id, // Vincular con el usuario creado
             EstadoId = 2, // Activo (creado por admin)
             OrigenRegistro = 1, // Administración
             Activo = true,
@@ -186,6 +221,13 @@ public class ClienteService : IClienteService
                 FechaUltimaActualizacion = cliente.CuentaCorriente.FechaModificacion
             } : null
         };
+    }
+
+    private static string HashPassword(string password)
+    {
+        using var sha256 = SHA256.Create();
+        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+        return Convert.ToBase64String(hashedBytes);
     }
 }
 

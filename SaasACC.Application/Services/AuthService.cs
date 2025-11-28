@@ -15,6 +15,7 @@ public interface IAuthService
     Task<LoginResponse> LoginAsync(LoginRequest request);
     Task<RegisterResponse> RegisterComercioAsync(RegisterComercioRequest request);
     Task<RegisterResponse> RegisterClienteAsync(RegisterClienteRequest request);
+    Task<ChangePasswordResponse> ChangePasswordAsync(int usuarioId, ChangePasswordRequest request);
     string GenerateJwtTokenAsync(Usuario usuario, int? clienteId = null);
 }
 
@@ -68,6 +69,8 @@ public class AuthService : IAuthService
 
             // Si es un cliente, validar que esté aprobado
             int? clienteId = null;
+            bool requiereCambioPassword = false;
+
             if (usuario.Rol == "Cliente")
             {
                 var cliente = await _clienteRepository.GetByEmailAsync(request.Email, usuario.ComercioId);
@@ -94,13 +97,25 @@ public class AuthService : IAuthService
                 }
 
                 clienteId = cliente.Id;
+
+                // Verificar si requiere cambio de contraseña:
+                // - Nunca ha iniciado sesión (UltimoAcceso == null)
+                // - Fue creado desde administración (OrigenRegistro == 1)
+                if (usuario.UltimoAcceso == null && cliente.OrigenRegistro == 1)
+                {
+                    requiereCambioPassword = true;
+                }
             }
 
             // Generar token JWT
             var token = GenerateJwtTokenAsync(usuario, clienteId);
 
-            // Actualizar último acceso
-            await _usuarioRepository.UpdateLastAccessAsync(usuario.Id);
+            // Actualizar último acceso solo si no requiere cambio de contraseña
+            // (se actualizará después del cambio de contraseña)
+            if (!requiereCambioPassword)
+            {
+                await _usuarioRepository.UpdateLastAccessAsync(usuario.Id);
+            }
 
             return new LoginResponse
             {
@@ -109,7 +124,8 @@ public class AuthService : IAuthService
                 Role = usuario.Rol,
                 ComercioId = usuario.ComercioId,
                 UserName = usuario.Nombre,
-                ErrorMessage = string.Empty
+                ErrorMessage = string.Empty,
+                RequiereCambioPassword = requiereCambioPassword
             };
         }
         catch (Exception ex)
@@ -330,6 +346,77 @@ public class AuthService : IAuthService
             {
                 Success = false,
                 ErrorMessage = $"Error al registrar cliente: {ex.Message}"
+            };
+        }
+    }
+
+    public async Task<ChangePasswordResponse> ChangePasswordAsync(int usuarioId, ChangePasswordRequest request)
+    {
+        try
+        {
+            // Validar que las contraseñas coincidan
+            if (request.NewPassword != request.ConfirmPassword)
+            {
+                return new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Las contraseñas no coinciden"
+                };
+            }
+
+            // Validar longitud de la nueva contraseña
+            if (request.NewPassword.Length < 6)
+            {
+                return new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "La contraseña debe tener al menos 6 caracteres"
+                };
+            }
+
+            // Obtener usuario
+            var usuario = await _usuarioRepository.GetByIdAsync(usuarioId);
+            if (usuario == null)
+            {
+                return new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Usuario no encontrado"
+                };
+            }
+
+            // Validar contraseña actual
+            var currentPasswordHash = HashPassword(request.CurrentPassword);
+            if (usuario.PasswordHash != currentPasswordHash)
+            {
+                return new ChangePasswordResponse
+                {
+                    Success = false,
+                    ErrorMessage = "La contraseña actual es incorrecta"
+                };
+            }
+
+            // Actualizar contraseña
+            usuario.PasswordHash = HashPassword(request.NewPassword);
+            usuario.FechaModificacion = DateTime.UtcNow;
+
+            // Actualizar último acceso (importante para marcar que ya cambió la contraseña)
+            await _usuarioRepository.UpdateLastAccessAsync(usuario.Id);
+
+            await _usuarioRepository.UpdateAsync(usuario);
+
+            return new ChangePasswordResponse
+            {
+                Success = true,
+                Message = "Contraseña actualizada correctamente"
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ChangePasswordResponse
+            {
+                Success = false,
+                ErrorMessage = $"Error al cambiar contraseña: {ex.Message}"
             };
         }
     }

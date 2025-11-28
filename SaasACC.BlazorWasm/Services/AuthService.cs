@@ -1,9 +1,9 @@
 ﻿using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components.Authorization;
+using SaasACC.Model.Servicios.Login;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using SaasACC.Model.Servicios.Login;
 
 namespace SaacACC.BlazorWasm.Services
 {
@@ -111,6 +111,27 @@ namespace SaacACC.BlazorWasm.Services
             catch (Exception ex)
             {
                 return new RegisterResponse { Success = false, ErrorMessage = ex.Message };
+            }
+        }
+
+        public async Task<ChangePasswordResponse> ChangePassword(ChangePasswordRequest request)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(request);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync("api/auth/change-password", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                var changePasswordResponse = JsonSerializer.Deserialize<ChangePasswordResponse>(responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                return changePasswordResponse ?? new ChangePasswordResponse { Success = false, ErrorMessage = "Error de conexión" };
+            }
+            catch (Exception ex)
+            {
+                return new ChangePasswordResponse { Success = false, ErrorMessage = ex.Message };
             }
         }
 
