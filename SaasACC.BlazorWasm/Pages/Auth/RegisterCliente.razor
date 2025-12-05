@@ -97,6 +97,9 @@
                              Required="true"
                              RequiredError="La contraseña es requerida"
                              InputType="InputType.Password"
+                             Adornment="Adornment.End"
+                             AdornmentIcon="@passwordInputIcon"
+                             OnAdornmentClick="TogglePasswordVisibility"
                              Class="mb-3" />
 
                 <MudTextField @bind-Value="model.ConfirmPassword"
@@ -145,6 +148,23 @@
     private bool loading;
     private bool loadingComercios = true;
     private List<ComercioListItem> comercios = new();
+
+    private InputType passwordInputType = InputType.Password;
+    private string passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+
+    void TogglePasswordVisibility()
+    {
+        if (passwordInputType == InputType.Password)
+        {
+            passwordInputType = InputType.Text;
+            passwordInputIcon = Icons.Material.Filled.Visibility;
+        }
+        else
+        {
+            passwordInputType = InputType.Password;
+            passwordInputIcon = Icons.Material.Filled.VisibilityOff;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
