@@ -91,11 +91,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasMaxLength(50)
                 .HasDefaultValue("Usuario");
 
+            // ComercioId ahora es nullable (NULL para clientes, NOT NULL para Admin/UsuarioComercio)
             entity.HasOne(u => u.Comercio)
                 .WithMany(c => c.Usuarios)
                 .HasForeignKey(u => u.ComercioId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false); // NULLABLE
 
+            // Email único GLOBAL (se mantiene)
             entity.HasIndex(u => u.Email).IsUnique();
         });
     }
@@ -132,32 +135,49 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .IsRequired()
                 .HasDefaultValue(1); // 1: Administracion, 2: Autogestion
 
+            entity.Property(c => c.Alias)
+                .HasMaxLength(100);
+
+            entity.Property(c => c.NotasComercio)
+                .HasMaxLength(500);
+
+            // Relación Usuario → Cliente (1:N) - REQUIRED
+            entity.HasOne(c => c.Usuario)
+                .WithMany(u => u.Clientes)
+                .HasForeignKey(c => c.UsuarioId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(true); // UsuarioId es REQUIRED
+
+            // Relación Comercio → Cliente (1:N)
             entity.HasOne(c => c.Comercio)
                 .WithMany(co => co.Clientes)
                 .HasForeignKey(c => c.ComercioId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Relación 1:1 con CuentaCorriente
             entity.HasOne(c => c.CuentaCorriente)
                 .WithOne(cc => cc.Cliente)
                 .HasForeignKey<CuentaCorriente>(cc => cc.ClienteId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Relación con EstadoCliente
             entity.HasOne(c => c.Estado)
                 .WithMany(e => e.Clientes)
                 .HasForeignKey(c => c.EstadoId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(c => c.Usuario)
-                .WithMany()
-                .HasForeignKey(c => c.UsuarioId)
-                .OnDelete(DeleteBehavior.Restrict);
-
+            // Relación con Usuario (aprobación)
             entity.HasOne(c => c.AprobadoPor)
                 .WithMany(u => u.ClientesAprobados)
                 .HasForeignKey(c => c.AprobadoPorUsuarioId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // ÍNDICE ÚNICO: Un usuario solo puede ser cliente una vez por comercio
+            entity.HasIndex(c => new { c.UsuarioId, c.ComercioId }).IsUnique();
+
+            // MANTENER índice de Email+Comercio por compatibilidad
             entity.HasIndex(c => new { c.ComercioId, c.Email }).IsUnique();
+
             entity.HasIndex(c => c.EstadoId);
         });
     }

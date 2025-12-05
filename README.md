@@ -48,12 +48,15 @@ SaaSCuentasCorrientes/
 
 ### 🔐 Autenticación y Registro
 
-#### Sistema de Login
-- Login con email y password
+#### Sistema de Login con Multicomercio
+- Login con email y password (único por usuario)
+- **Un usuario puede ser cliente de múltiples comercios**
 - Generación de JWT Token (válido por 24 horas)
-- Roles: SuperAdmin, Admin, Usuario
+- Token incluye lista de comercios activos (`ComercioIds`)
+- Roles: Admin, UsuarioComercio, Cliente
 - Almacenamiento seguro del token en localStorage
 - Redirección automática según rol del usuario
+- **Para clientes**: Selector de comercio después del login si tiene múltiples vinculaciones
 
 #### Sistema de Registro con Dos Botones Separados
 - **Página de selección**: Dos botones claramente diferenciados
@@ -78,8 +81,9 @@ SaaSCuentasCorrientes/
   - Dirección (opcional)
 - **Flujo de Aprobación**:
   - Cliente queda en estado "Pendiente" al registrarse
-  - Creación de usuario con rol "Cliente"
-  - NO puede hacer login hasta ser aprobado
+  - Creación de usuario con rol "Cliente" (si no existe)
+  - **Si usuario ya existe**: Valida contraseña y crea solo la vinculación al comercio
+  - NO puede hacer login en ese comercio hasta ser aprobado
   - Cuenta corriente se crea solo cuando el comercio lo aprueba
 - Mensaje de confirmación y redirección a login
 
@@ -107,6 +111,30 @@ SaaSCuentasCorrientes/
 - Búsqueda y filtrado por estado
 - Soft delete (desactivación sin borrado físico)
 - Creación automática de cuenta corriente (al aprobar o para admin-created)
+- **Detección de clientes existentes**: Al agregar cliente, si el email ya existe en el sistema, reutiliza el usuario y crea solo la vinculación
+
+### 🔗 Cliente Multicomercio ⭐ NUEVO
+
+#### Modelo de Vinculación
+- **Un usuario puede ser cliente de múltiples comercios**
+- Email único global (un solo login para todos los comercios)
+- Cada vinculación (Cliente) tiene su propia:
+  - Estado de aprobación independiente
+  - Cuenta corriente separada
+  - Historial de movimientos independiente
+- Cliente actúa como **tabla intermedia** entre Usuario y Comercio
+
+#### Vinculación de Usuario a Nuevo Comercio
+- Cliente autenticado puede vincularse a otros comercios
+- Flujo de autogestión con aprobación del comercio
+- Mantiene su email y contraseña únicos
+- Acceso centralizado a múltiples cuentas
+
+#### Comercio Agrega Cliente Existente
+- Al crear cliente, el sistema detecta si el email ya existe
+- Si existe: Reutiliza el usuario y crea solo la vinculación al comercio
+- Si no existe: Crea nuevo usuario + vinculación
+- Evita duplicación de usuarios en el sistema
 
 ### 💰 Cuentas Corrientes
 - Creación automática al registrar cliente
@@ -139,7 +167,9 @@ GET    /api/comercios                   # Listar comercios activos
 GET    /api/clientes?estadoId={id}      # Listar clientes (filtro opcional por estado)
 GET    /api/clientes/{id}               # Obtener cliente por ID
 GET    /api/clientes/pendientes         # Listar solo clientes pendientes de aprobación
-POST   /api/clientes                    # Crear cliente (admin - auto-aprobado)
+GET    /api/clientes/mis-comercios      # Listar comercios del usuario autenticado ⭐ NUEVO
+POST   /api/clientes                    # Crear cliente (admin - auto-aprobado, detecta usuarios existentes)
+POST   /api/clientes/vincular           # Vincular usuario a nuevo comercio ⭐ NUEVO
 POST   /api/clientes/{id}/aprobar       # Aprobar cliente pendiente
 POST   /api/clientes/{id}/rechazar      # Rechazar cliente pendiente
 PUT    /api/clientes/{id}               # Actualizar cliente
@@ -157,22 +187,25 @@ DELETE /api/clientes/{id}               # Eliminar cliente (soft delete)
 
 **Usuario**
 - Administradores, operadores del comercio y clientes
-- Autenticación con email/password
-- Roles: Admin, Usuario, SuperAdmin, Cliente
-- Pertenece a un Comercio
+- Autenticación con email/password (único global)
+- Roles: Admin, UsuarioComercio, Cliente
+- **ComercioId nullable**: NULL para clientes, NOT NULL para Admin/UsuarioComercio
+- **Relación 1:N con Cliente**: Un usuario puede tener múltiples vinculaciones
 
 **EstadoCliente** ⭐ NUEVO
 - Sistema extensible de estados
 - Estados: Pendiente, Activo, Inactivo
 - Permite agregar nuevos estados en el futuro
 
-**Cliente**
-- Deudores/acreedores del comercio
-- Información de contacto
-- Estado (Pendiente/Activo/Inactivo)
+**Cliente** ⭐ REFACTORIZADO
+- **Tabla intermedia** entre Usuario y Comercio
+- **UsuarioId (required)**: FK a Usuario (NO nullable)
+- Información de contacto (mantenida por compatibilidad)
+- Estado (Pendiente/Activo/Inactivo) - **Específico por vinculación**
 - Origen (Administración/Autogestión)
-- Usuario asociado (opcional, solo para autogestión)
-- Tiene una CuentaCorriente (creada al aprobar)
+- **Alias y NotasComercio**: Datos específicos de esta vinculación
+- Índice único: `{UsuarioId, ComercioId}` - Un usuario solo puede vincularse una vez por comercio
+- Tiene una CuentaCorriente (1:1, creada al aprobar)
 
 **CuentaCorriente**
 - Límite de crédito
@@ -377,11 +410,22 @@ Para reportar bugs o solicitar funcionalidades, crear un issue en GitHub.
 
 ---
 
-**Última actualización**: 2025-11-20
-**Branch actual**: 8-usuario-por-autogestión
-**Versión**: 1.1.0-beta
+**Última actualización**: 2025-12-04
+**Branch actual**: hardcore-wright
+**Versión**: 1.2.0-beta
 
 ## 📋 Changelog
+
+### v1.2.0-beta (2025-12-04) ⭐ NUEVO
+- ✨ **Cliente Multicomercio**: Un usuario puede ser cliente de múltiples comercios
+- ✨ **Vinculación de Usuario**: Clientes pueden vincularse a nuevos comercios
+- ✨ **Detección de Usuarios Existentes**: Al agregar cliente, reutiliza usuarios existentes
+- ✨ **Login Multicomercio**: Token incluye lista de comercios activos del usuario
+- 🔧 **Usuario.ComercioId nullable**: NULL para clientes, NOT NULL para Admin/UsuarioComercio
+- 🔧 **Cliente como tabla intermedia**: UsuarioId required, índice único {UsuarioId, ComercioId}
+- 🔧 **Nuevos endpoints**: GET /api/clientes/mis-comercios, POST /api/clientes/vincular
+- 🔧 **AuthService refactorizado**: Soporte para múltiples vinculaciones en login y registro
+- 📊 **Nuevos DTOs**: MiComercioDto, ComercioInfo en LoginResponse
 
 ### v1.1.0-beta (2025-11-20)
 - ✨ **Sistema de Aprobación de Clientes**: Diferenciación entre clientes creados por admin vs autogestión

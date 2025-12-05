@@ -32,3 +32,14 @@ public class CuentaCorrienteDto
     public DateTime FechaCreacion { get; set; }
     public DateTime? FechaUltimaActualizacion { get; set; }
 }
+
+public class MiComercioDto
+{
+    public int ComercioId { get; set; }
+    public string NombreComercio { get; set; } = string.Empty;
+    public int EstadoId { get; set; }
+    public string EstadoNombre { get; set; } = string.Empty;
+    public DateTime FechaVinculacion { get; set; }
+    public DateTime? FechaAprobacion { get; set; }
+    public decimal Saldo { get; set; }
+}

@@ -268,6 +268,58 @@ public class ClientesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Obtiene los comercios asociados al usuario autenticado (para clientes)
+    /// </summary>
+    [HttpGet("mis-comercios")]
+    [Authorize(Roles = "Cliente")]
+    public async Task<ActionResult<IEnumerable<MiComercioDto>>> GetMisComercios()
+    {
+        try
+        {
+            var usuarioId = GetUsuarioIdFromToken();
+            var comercios = await _clienteService.GetComerciosDeUsuarioAsync(usuarioId);
+
+            return Ok(comercios);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "No se pudo obtener el UsuarioId del token");
+            return Unauthorized(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener comercios del usuario");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
+    /// <summary>
+    /// Vincula un usuario a un comercio (autogestión)
+    /// </summary>
+    [HttpPost("vincular")]
+    [Authorize(Roles = "Cliente")]
+    public async Task<ActionResult<ClienteDto>> VincularAComercio([FromBody] VincularComercioRequest request)
+    {
+        try
+        {
+            var usuarioId = GetUsuarioIdFromToken();
+            var resultado = await _clienteService.VincularUsuarioAComercioAsync(
+                usuarioId, request.ComercioId, request.RequiereAprobacion);
+
+            return Ok(resultado);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al vincular usuario a comercio");
+            return StatusCode(500, "Error interno del servidor");
+        }
+    }
+
     private int GetUsuarioIdFromToken()
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -298,5 +350,12 @@ public class ClientesController : ControllerBase
 
         throw new UnauthorizedAccessException($"No se pudo obtener el ID del comercio del token. Claims disponibles: {allClaims}");
     }
+}
+
+// Request DTOs
+public class VincularComercioRequest
+{
+    public int ComercioId { get; set; }
+    public bool RequiereAprobacion { get; set; } = true;
 }
 

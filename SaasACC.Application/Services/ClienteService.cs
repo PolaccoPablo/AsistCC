@@ -17,17 +17,26 @@ public interface IClienteService
     Task<ClienteDto> AprobarClienteAsync(int clienteId, int aprobadoPorUsuarioId);
     Task<ClienteDto> RechazarClienteAsync(int clienteId, int rechazadoPorUsuarioId);
     Task<IEnumerable<ClienteDto>> GetClientesPendientesAsync(int comercioId);
+
+    // Nuevos métodos para modelo multicomercio
+    Task<IEnumerable<MiComercioDto>> GetComerciosDeUsuarioAsync(int usuarioId);
+    Task<ClienteDto> VincularUsuarioAComercioAsync(int usuarioId, int comercioId, bool requiereAprobacion = true);
 }
 
 public class ClienteService : IClienteService
 {
     private readonly IClienteRepository _clienteRepository;
     private readonly IUsuarioRepository _usuarioRepository;
+    private readonly IComercioRepository _comercioRepository;
 
-    public ClienteService(IClienteRepository clienteRepository, IUsuarioRepository usuarioRepository)
+    public ClienteService(
+        IClienteRepository clienteRepository,
+        IUsuarioRepository usuarioRepository,
+        IComercioRepository comercioRepository)
     {
         _clienteRepository = clienteRepository;
         _usuarioRepository = usuarioRepository;
+        _comercioRepository = comercioRepository;
     }
 
     public async Task<IEnumerable<ClienteDto>> GetAllClientesAsync(int comercioId, int? estadoId = null)
@@ -44,51 +53,61 @@ public class ClienteService : IClienteService
 
     public async Task<ClienteDto> CreateClienteAsync(CreateClienteRequest request)
     {
-        // Validar que el email no exista como cliente
-        if (await _clienteRepository.EmailExistsAsync(request.Email, request.ComercioId))
-        {
-            throw new InvalidOperationException($"Ya existe un cliente con el email {request.Email}");
-        }
+        Usuario usuario;
 
-        // Validar que el email no exista como usuario
+        // Verificar si el usuario ya existe (por email)
         var usuarioExistente = await _usuarioRepository.GetByEmailAsync(request.Email);
+
         if (usuarioExistente != null)
         {
-            throw new InvalidOperationException($"Ya existe un usuario con el email {request.Email}");
+            // Usuario existe: verificar que no esté ya vinculado a este comercio
+            var yaEsCliente = await _clienteRepository.ExisteVinculoAsync(
+                usuarioExistente.Id, request.ComercioId);
+
+            if (yaEsCliente)
+            {
+                throw new InvalidOperationException(
+                    "Este usuario ya es cliente de este comercio");
+            }
+
+            usuario = usuarioExistente;
+        }
+        else
+        {
+            // Usuario NO existe: validar DNI y crear nuevo usuario
+            if (string.IsNullOrWhiteSpace(request.DNI))
+            {
+                throw new InvalidOperationException(
+                    "El DNI es requerido para crear un cliente nuevo desde la administración");
+            }
+
+            // Crear el usuario con contraseña temporal = DNI
+            usuario = new Usuario
+            {
+                Nombre = request.Nombre,
+                Apellido = request.Apellido,
+                Email = request.Email,
+                PasswordHash = HashPassword(request.DNI),
+                Rol = "Cliente",
+                ComercioId = null, // NULL para clientes (se relacionan vía Cliente)
+                FechaCreacion = DateTime.UtcNow,
+                Activo = true
+                // UltimoAcceso queda null, indicando que nunca ha iniciado sesión
+            };
+
+            usuario = await _usuarioRepository.CreateAsync(usuario);
         }
 
-        // Validar que se haya proporcionado el DNI (se usará como contraseña temporal)
-        if (string.IsNullOrWhiteSpace(request.DNI))
-        {
-            throw new InvalidOperationException("El DNI es requerido para crear un cliente desde la administración");
-        }
-
-        // Crear el usuario primero con contraseña temporal = DNI
-        var usuario = new Usuario
-        {
-            Nombre = request.Nombre,
-            Apellido = request.Apellido,
-            Email = request.Email,
-            PasswordHash = HashPassword(request.DNI),
-            Rol = "Cliente",
-            ComercioId = request.ComercioId,
-            FechaCreacion = DateTime.UtcNow,
-            Activo = true
-            // UltimoAcceso queda null, indicando que nunca ha iniciado sesión
-        };
-
-        usuario = await _usuarioRepository.CreateAsync(usuario);
-
-        // Crear el cliente vinculado al usuario
+        // Crear la vinculación Cliente (tabla intermedia Usuario-Comercio)
         var cliente = new Cliente
         {
             Nombre = request.Nombre,
             Apellido = request.Apellido,
             Email = request.Email,
             Telefono = request.Telefono ?? string.Empty,
-            DNI = request.DNI,
+            DNI = request.DNI ?? string.Empty,
+            UsuarioId = usuario.Id, // FK a Usuario (REQUIRED)
             ComercioId = request.ComercioId,
-            UsuarioId = usuario.Id, // Vincular con el usuario creado
             EstadoId = 2, // Activo (creado por admin)
             OrigenRegistro = 1, // Administración
             Activo = true,
@@ -228,6 +247,73 @@ public class ClienteService : IClienteService
         using var sha256 = SHA256.Create();
         var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
         return Convert.ToBase64String(hashedBytes);
+    }
+
+    // Nuevos métodos para modelo multicomercio
+
+    public async Task<IEnumerable<MiComercioDto>> GetComerciosDeUsuarioAsync(int usuarioId)
+    {
+        var clientes = await _clienteRepository.GetByUsuarioIdAsync(usuarioId);
+
+        return clientes.Select(c => new MiComercioDto
+        {
+            ComercioId = c.ComercioId,
+            NombreComercio = c.Comercio.Nombre,
+            EstadoId = c.EstadoId,
+            EstadoNombre = c.Estado.Nombre,
+            FechaVinculacion = c.FechaCreacion,
+            FechaAprobacion = c.FechaAprobacion,
+            Saldo = c.CuentaCorriente?.Saldo ?? 0
+        });
+    }
+
+    public async Task<ClienteDto> VincularUsuarioAComercioAsync(int usuarioId, int comercioId, bool requiereAprobacion = true)
+    {
+        // Validar que usuario existe
+        var usuario = await _usuarioRepository.GetByIdAsync(usuarioId);
+        if (usuario == null)
+        {
+            throw new InvalidOperationException("Usuario no encontrado");
+        }
+
+        // Validar que comercio existe
+        if (!await _comercioRepository.ExistsAsync(comercioId))
+        {
+            throw new InvalidOperationException("Comercio no encontrado");
+        }
+
+        // Validar que no esté ya vinculado
+        if (await _clienteRepository.ExisteVinculoAsync(usuarioId, comercioId))
+        {
+            throw new InvalidOperationException("El usuario ya está vinculado a este comercio");
+        }
+
+        // Crear vinculación
+        var cliente = new Cliente
+        {
+            Nombre = usuario.Nombre,
+            Apellido = usuario.Apellido ?? string.Empty,
+            Email = usuario.Email,
+            Telefono = string.Empty,
+            UsuarioId = usuarioId,
+            ComercioId = comercioId,
+            EstadoId = requiereAprobacion ? 1 : 2, // Pendiente o Activo
+            OrigenRegistro = 2, // Autogestión (usuario se vincula por sí mismo)
+            Activo = true,
+            FechaCreacion = DateTime.UtcNow,
+            FechaAprobacion = requiereAprobacion ? null : DateTime.UtcNow
+        };
+
+        var clienteCreado = await _clienteRepository.CreateAsync(cliente);
+
+        // Si no requiere aprobación, crear cuenta corriente inmediatamente
+        if (!requiereAprobacion)
+        {
+            await _clienteRepository.CrearCuentaCorrienteAsync(clienteCreado.Id);
+        }
+
+        var clienteConCuenta = await _clienteRepository.GetByIdAsync(clienteCreado.Id);
+        return MapToDto(clienteConCuenta!);
     }
 }
 
