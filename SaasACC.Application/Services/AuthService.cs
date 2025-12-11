@@ -67,48 +67,56 @@ public class AuthService : IAuthService
                 };
             }
 
-            // Si es un cliente, validar que esté aprobado
-            int? clienteId = null;
+            // Si es un cliente, obtener sus comercios
             bool requiereCambioPassword = false;
+            List<ComercioInfo>? comercios = null;
 
             if (usuario.Rol == "Cliente")
             {
-                var cliente = await _clienteRepository.GetByEmailAsync(request.Email, usuario.ComercioId);
+                // Obtener todos los clientes (vinculaciones) de este usuario
+                var clientes = await _clienteRepository.GetByUsuarioIdAsync(usuario.Id);
+                var clientesActivos = clientes.Where(c => c.EstadoId == 2).ToList();
 
-                if (cliente == null)
+                if (clientesActivos.Count == 0)
                 {
-                    return new LoginResponse
+                    // No tiene ningún comercio activo
+                    var clientesPendientes = clientes.Where(c => c.EstadoId == 1).ToList();
+                    if (clientesPendientes.Any())
                     {
-                        Success = false,
-                        ErrorMessage = "No se encontró el cliente asociado a este usuario"
-                    };
-                }
-
-                // Validar que el cliente esté aprobado (EstadoId = 2)
-                if (cliente.EstadoId != 2)
-                {
-                    return new LoginResponse
+                        return new LoginResponse
+                        {
+                            Success = false,
+                            ErrorMessage = "Tu cuenta está pendiente de aprobación por el comercio"
+                        };
+                    }
+                    else
                     {
-                        Success = false,
-                        ErrorMessage = cliente.EstadoId == 1
-                            ? "Tu cuenta está pendiente de aprobación por el comercio"
-                            : "Tu cuenta ha sido inactivada. Contacta al comercio para más información"
-                    };
+                        return new LoginResponse
+                        {
+                            Success = false,
+                            ErrorMessage = "Tu cuenta ha sido inactivada. Contacta al comercio para más información"
+                        };
+                    }
                 }
-
-                clienteId = cliente.Id;
 
                 // Verificar si requiere cambio de contraseña:
                 // - Nunca ha iniciado sesión (UltimoAcceso == null)
-                // - Fue creado desde administración (OrigenRegistro == 1)
-                if (usuario.UltimoAcceso == null && cliente.OrigenRegistro == 1)
+                // - Fue creado desde administración (OrigenRegistro == 1) en al menos un comercio
+                if (usuario.UltimoAcceso == null && clientesActivos.Any(c => c.OrigenRegistro == 1))
                 {
                     requiereCambioPassword = true;
                 }
+
+                // Crear lista de comercios para el response
+                comercios = clientesActivos.Select(c => new ComercioInfo
+                {
+                    Id = c.ComercioId,
+                    Nombre = c.Comercio.Nombre
+                }).ToList();
             }
 
             // Generar token JWT
-            var token = GenerateJwtTokenAsync(usuario, clienteId);
+            var token = GenerateJwtTokenAsync(usuario, comercios);
 
             // Actualizar último acceso solo si no requiere cambio de contraseña
             // (se actualizará después del cambio de contraseña)
@@ -122,10 +130,11 @@ public class AuthService : IAuthService
                 Success = true,
                 Token = token,
                 Role = usuario.Rol,
-                ComercioId = usuario.ComercioId,
+                ComercioId = usuario.ComercioId, // Para Admin/UsuarioComercio
                 UserName = usuario.Nombre,
                 ErrorMessage = string.Empty,
-                RequiereCambioPassword = requiereCambioPassword
+                RequiereCambioPassword = requiereCambioPassword,
+                Comercios = comercios // Para clientes con múltiples comercios
             };
         }
         catch (Exception ex)
@@ -138,7 +147,7 @@ public class AuthService : IAuthService
         }
     }
 
-    public string GenerateJwtTokenAsync(Usuario usuario, int? clienteId = null)
+    public string GenerateJwtTokenAsync(Usuario usuario, List<ComercioInfo>? comercios = null)
     {
         var jwtKey = _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured");
         var jwtIssuer = _configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("JWT Issuer not configured");
@@ -154,17 +163,23 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.Email, usuario.Email),
             new Claim(ClaimTypes.Name, usuario.Nombre),
             new Claim(ClaimTypes.Role, usuario.Rol),
-            new Claim("ComercioId", usuario.ComercioId.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(JwtRegisteredClaimNames.Iat,
                 new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
 
-        // Si es un cliente, agregar el ClienteId al token
-        if (clienteId.HasValue)
+        // Para Admin/UsuarioComercio: agregar ComercioId
+        if (usuario.ComercioId.HasValue)
         {
-            claimsList.Add(new Claim("ClienteId", clienteId.Value.ToString()));
+            claimsList.Add(new Claim("ComercioId", usuario.ComercioId.Value.ToString()));
+        }
+
+        // Para Cliente: agregar lista de ComercioIds
+        if (comercios != null && comercios.Any())
+        {
+            claimsList.Add(new Claim("ComercioIds",
+                string.Join(",", comercios.Select(c => c.Id))));
         }
 
         var token = new JwtSecurityToken(
@@ -265,16 +280,6 @@ public class AuthService : IAuthService
                 };
             }
 
-            // Validar que no exista el email del cliente en este comercio
-            if (await _clienteRepository.EmailExistsAsync(request.Email, request.ComercioId))
-            {
-                return new RegisterResponse
-                {
-                    Success = false,
-                    ErrorMessage = "Ya existe un cliente con este email en el comercio seleccionado"
-                };
-            }
-
             // Validar que se proporcionó la contraseña
             if (string.IsNullOrWhiteSpace(request.Password))
             {
@@ -285,43 +290,64 @@ public class AuthService : IAuthService
                 };
             }
 
-            // Validar que no exista un usuario con este email
+            Usuario usuario;
+
+            // Verificar si el usuario ya existe
             var usuarioExistente = await _usuarioRepository.GetByEmailAsync(request.Email);
+
             if (usuarioExistente != null)
             {
-                return new RegisterResponse
+                // Usuario existe: verificar contraseña
+                if (!await _usuarioRepository.ValidatePasswordAsync(request.Email, request.Password))
                 {
-                    Success = false,
-                    ErrorMessage = "Ya existe un usuario registrado con este email"
+                    return new RegisterResponse
+                    {
+                        Success = false,
+                        ErrorMessage = "Ya existe un usuario con este email pero la contraseña no coincide"
+                    };
+                }
+
+                // Verificar que no esté ya vinculado a este comercio
+                if (await _clienteRepository.ExisteVinculoAsync(usuarioExistente.Id, request.ComercioId))
+                {
+                    return new RegisterResponse
+                    {
+                        Success = false,
+                        ErrorMessage = "Ya estás registrado en este comercio"
+                    };
+                }
+
+                usuario = usuarioExistente;
+            }
+            else
+            {
+                // Usuario NO existe: crear nuevo
+                usuario = new Usuario
+                {
+                    Nombre = request.Nombre,
+                    Apellido = request.Apellido,
+                    Email = request.Email,
+                    PasswordHash = HashPassword(request.Password),
+                    Rol = "Cliente",
+                    ComercioId = null, // NULL para clientes (se relacionan vía Cliente)
+                    FechaCreacion = DateTime.UtcNow,
+                    Activo = true
                 };
+
+                usuario = await _usuarioRepository.CreateAsync(usuario);
             }
 
-            // Crear usuario con rol Cliente
-            var usuario = new Usuario
-            {
-                Nombre = request.Nombre,
-                Apellido = request.Apellido,
-                Email = request.Email,
-                PasswordHash = HashPassword(request.Password),
-                Rol = "Cliente",
-                ComercioId = request.ComercioId,
-                FechaCreacion = DateTime.UtcNow,
-                Activo = true
-            };
-
-            usuario = await _usuarioRepository.CreateAsync(usuario);
-
-            // Crear el cliente vinculado al usuario
+            // Crear la vinculación Cliente
             var cliente = new Cliente
             {
                 Nombre = request.Nombre,
                 Apellido = request.Apellido,
                 Email = request.Email,
-                Telefono = request.Telefono,
+                Telefono = request.Telefono ?? string.Empty,
                 Direccion = request.Direccion,
                 DNI = request.DNI,
+                UsuarioId = usuario.Id,
                 ComercioId = request.ComercioId,
-                UsuarioId = usuario.Id, // Vincular con el usuario
                 EstadoId = 1, // Pendiente de aprobación
                 OrigenRegistro = 2, // Autogestión
                 FechaCreacion = DateTime.UtcNow,

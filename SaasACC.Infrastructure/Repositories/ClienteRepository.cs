@@ -141,5 +141,34 @@ public class ClienteRepository : IClienteRepository
 
         return cuentaCorriente;
     }
+
+    // Nuevos métodos para modelo multicomercio
+
+    public async Task<IEnumerable<Cliente>> GetByUsuarioIdAsync(int usuarioId)
+    {
+        return await _context.Clientes
+            .Include(c => c.Comercio)
+            .Include(c => c.CuentaCorriente)
+            .Include(c => c.Estado)
+            .Where(c => c.UsuarioId == usuarioId && c.Activo)
+            .OrderBy(c => c.Comercio.Nombre)
+            .ToListAsync();
+    }
+
+    public async Task<bool> ExisteVinculoAsync(int usuarioId, int comercioId)
+    {
+        return await _context.Clientes
+            .AnyAsync(c => c.UsuarioId == usuarioId && c.ComercioId == comercioId && c.Activo);
+    }
+
+    public async Task<Cliente?> GetVinculoAsync(int usuarioId, int comercioId)
+    {
+        return await _context.Clientes
+            .Include(c => c.Comercio)
+            .Include(c => c.CuentaCorriente)
+            .Include(c => c.Estado)
+            .Include(c => c.Usuario)
+            .FirstOrDefaultAsync(c => c.UsuarioId == usuarioId && c.ComercioId == comercioId && c.Activo);
+    }
 }
 

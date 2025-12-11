@@ -1,11 +1,419 @@
 ================================================================================
 RESUMEN DE DESARROLLO - SaaS Cuentas Corrientes
 ================================================================================
-Fecha: 2025-11-20
-Branch actual: 8-usuario-por-autogestión
+Fecha: 2025-12-04
+Branch actual: hardcore-wright
 
 ================================================================================
-ÚLTIMA IMPLEMENTACIÓN: Sistema de Registro con Dos Botones Separados
+ÚLTIMA IMPLEMENTACIÓN: Refactorización Cliente Multicomercio
+================================================================================
+Fecha: 2025-12-04
+Branch: hardcore-wright
+
+DESCRIPCIÓN:
+------------
+Se refactorizó completamente el modelo de datos para permitir que un usuario
+(persona física con email único) pueda ser cliente de múltiples comercios,
+manteniendo un solo login y múltiples vinculaciones independientes.
+
+OBJETIVO LOGRADO:
+-----------------
+✓ Un usuario con email único puede ser cliente de múltiples comercios
+✓ Un solo login (email + contraseña) para acceder a todos sus comercios
+✓ Cada vinculación (Cliente) tiene su propio estado de aprobación
+✓ Cada vinculación tiene su propia cuenta corriente
+✓ Usuario.ComercioId = null para clientes (se relacionan vía tabla Cliente)
+✓ Cliente actúa como tabla intermedia entre Usuario y Comercio
+
+MODELO ANTES:
+-------------
+Usuario (ComercioId NOT NULL) 1:1 → Comercio
+Usuario (email único) 1:N → Cliente (pero solo 1 activo por comercio)
+Problema: No se podía crear otro Usuario con el mismo email
+
+MODELO DESPUÉS:
+---------------
+Usuario (ComercioId nullable) 0..1 → Comercio (solo para Admin/UsuarioComercio)
+Usuario (email único) 1:N → Cliente (múltiples activos) N:1 → Comercio
+
+Cliente ahora es tabla intermedia:
+Cliente {
+  UsuarioId (required FK)
+  ComercioId (required FK)
+  EstadoId
+  CuentaCorriente (1:1)
+  Alias, NotasComercio (datos específicos de esta vinculación)
+}
+
+================================================================================
+ARCHIVOS CREADOS
+================================================================================
+
+1. PLAN_REFACTOR_CLIENTE_MULTICOMERCIO.md
+   - Plan detallado de la refactorización
+   - Modelo antes/después
+   - Flujos de usuario
+   - Checklist de implementación
+
+================================================================================
+ARCHIVOS MODIFICADOS
+================================================================================
+
+ENTIDADES (SaasACC.Model/Entities/):
+------------------------------------
+
+1. Usuario.cs
+   - ComercioId: int → int? (nullable)
+   - Navegación Comercio: Comercio → Comercio? (nullable)
+   - Nueva colección: ICollection<Cliente> Clientes (vinculaciones del usuario)
+   - Mantiene ICollection<Cliente> ClientesAprobados (para auditoría)
+
+2. Cliente.cs
+   - UsuarioId: int? → int (REQUIRED, no nullable)
+   - Nuevos campos opcionales:
+     * string? Alias - Ej: "Juan el del taller"
+     * string? NotasComercio - Notas privadas del comercio sobre este cliente
+   - Navegación Usuario: Usuario? → Usuario (required)
+   - Comentarios actualizados indicando que Cliente es tabla intermedia
+
+CONFIGURACIÓN DE BASE DE DATOS (SaasACC.Infrastructure/):
+----------------------------------------------------------
+
+3. ApplicationDbContext.cs
+
+   ConfigurarUsuario():
+   - Usuario.ComercioId → .IsRequired(false) // NULLABLE
+   - Relación Usuario → Comercio → .IsRequired(false)
+   - Email único GLOBAL se mantiene
+
+   ConfigurarCliente():
+   - Nuevas propiedades:
+     * Alias → .HasMaxLength(100)
+     * NotasComercio → .HasMaxLength(500)
+
+   - Relación Usuario → Cliente:
+     * .HasOne(c => c.Usuario).WithMany(u => u.Clientes)
+     * .IsRequired(true) // UsuarioId es REQUIRED
+
+   - ÍNDICE ÚNICO NUEVO:
+     * entity.HasIndex(c => new { c.UsuarioId, c.ComercioId }).IsUnique()
+     * Un usuario solo puede ser cliente una vez por comercio
+
+   - MANTIENE índice Email+Comercio por compatibilidad
+
+REPOSITORIOS (SaasACC.Application/Interfaces/ y SaasACC.Infrastructure/Repositories/):
+--------------------------------------------------------------------------------------
+
+4. IClienteRepository.cs
+   Nuevos métodos:
+   - Task<IEnumerable<Cliente>> GetByUsuarioIdAsync(int usuarioId)
+   - Task<bool> ExisteVinculoAsync(int usuarioId, int comercioId)
+   - Task<Cliente?> GetVinculoAsync(int usuarioId, int comercioId)
+
+5. ClienteRepository.cs
+   Implementación de nuevos métodos:
+   - GetByUsuarioIdAsync: Obtiene todas las vinculaciones (clientes) de un usuario
+   - ExisteVinculoAsync: Verifica si ya existe vinculación Usuario-Comercio
+   - GetVinculoAsync: Obtiene vinculación específica con navegaciones
+
+SERVICIOS (SaasACC.Application/Services/):
+-------------------------------------------
+
+6. ClienteService.cs
+
+   CreateClienteAsync() - REFACTORIZADO:
+   - Busca si usuario ya existe por email
+   - Si existe: verifica que no esté ya vinculado al comercio, reutiliza usuario
+   - Si no existe: crea nuevo usuario con ComercioId = null (para clientes)
+   - Crea vinculación Cliente (tabla intermedia)
+   - Permite que un comercio agregue cliente que ya existe en otro comercio
+
+   Constructor - MODIFICADO:
+   - Nuevo parámetro: IComercioRepository _comercioRepository
+
+   Nuevos métodos:
+   - GetComerciosDeUsuarioAsync(int usuarioId)
+     * Retorna lista de comercios donde el usuario es cliente
+     * Incluye: ComercioId, Nombre, EstadoId, Saldo, FechaVinculación
+
+   - VincularUsuarioAComercioAsync(int usuarioId, int comercioId, bool requiereAprobacion)
+     * Permite que un usuario se vincule a un nuevo comercio
+     * Valida que usuario y comercio existan
+     * Valida que no esté ya vinculado
+     * Crea nueva vinculación Cliente
+     * Si no requiere aprobación, crea cuenta corriente inmediatamente
+
+7. AuthService.cs
+
+   LoginAsync() - REFACTORIZADO:
+   - Para clientes: obtiene TODAS sus vinculaciones activas (EstadoId = 2)
+   - Valida que tenga al menos un comercio activo
+   - Genera token con claim "ComercioIds" (lista separada por comas)
+   - Retorna lista de comercios en LoginResponse.Comercios
+
+   RegisterClienteAsync() - REFACTORIZADO:
+   - Busca si usuario ya existe por email
+   - Si existe: valida contraseña y verifica que no esté ya en ese comercio
+   - Si no existe: crea nuevo usuario con ComercioId = null
+   - Crea vinculación Cliente (EstadoId = 1 Pendiente)
+   - Permite que un usuario existente se registre en otro comercio
+
+   GenerateJwtTokenAsync() - REFACTORIZADO:
+   - Firma: (Usuario usuario, List<ComercioInfo>? comercios = null)
+   - Para Admin/UsuarioComercio: agrega claim "ComercioId" (único)
+   - Para Cliente: agrega claim "ComercioIds" (lista: "1,2,3")
+
+DTOs (SaasACC.Model/DTOs/):
+----------------------------
+
+8. ClienteDto.cs
+   Nuevo DTO:
+   - MiComercioDto: Para listar comercios del usuario
+     * ComercioId, NombreComercio
+     * EstadoId, EstadoNombre
+     * FechaVinculacion, FechaAprobacion
+     * Saldo
+
+9. LoginResponse.cs (SaasACC.Model/Servicios/Login/)
+   - Nuevo campo: List<ComercioInfo>? Comercios
+   - Nueva clase: ComercioInfo { int Id, string Nombre }
+
+CONTROLADORES (SaasACCAPI.api/Controllers/):
+---------------------------------------------
+
+10. ClientesController.cs
+
+    Nuevos endpoints:
+
+    GET /api/clientes/mis-comercios
+    - Autorización: [Authorize(Roles = "Cliente")]
+    - Retorna: IEnumerable<MiComercioDto>
+    - Descripción: Obtiene todos los comercios donde el usuario autenticado es cliente
+
+    POST /api/clientes/vincular
+    - Autorización: [Authorize(Roles = "Cliente")]
+    - Body: VincularComercioRequest { ComercioId, RequiereAprobacion }
+    - Retorna: ClienteDto
+    - Descripción: Vincula al usuario autenticado a un nuevo comercio
+
+    Nueva clase:
+    - VincularComercioRequest { int ComercioId, bool RequiereAprobacion = true }
+
+================================================================================
+FLUJOS DE USUARIO IMPLEMENTADOS
+================================================================================
+
+FLUJO 1: Cliente se vincula a otro comercio
+--------------------------------------------
+1. Juan (usuario existente, cliente de Comercio A) hace login
+2. Ve sus comercios: GET /api/clientes/mis-comercios
+3. Selecciona "Vincularme a otro comercio"
+4. POST /api/clientes/vincular { comercioId: 2, requiereAprobacion: true }
+5. Sistema:
+   - Valida que Juan no esté ya vinculado a Comercio B
+   - Crea Cliente (UsuarioId=Juan, ComercioId=2, EstadoId=1 Pendiente)
+6. Admin de Comercio B ve cliente pendiente
+7. POST /api/clientes/{id}/aprobar
+8. Sistema crea CuentaCorriente para Comercio B
+9. Juan ahora puede operar en ambos comercios
+
+FLUJO 2: Comercio agrega cliente existente
+-------------------------------------------
+1. Admin de Comercio B: "Agregar cliente"
+2. Ingresa email: juan@example.com (ya es cliente de Comercio A)
+3. POST /api/clientes { email: "juan@example.com", nombre: "Juan", ... }
+4. Sistema:
+   - Busca usuario por email → ENCUENTRA a Juan
+   - Verifica que no esté ya en Comercio B
+   - Crea vinculación Cliente (UsuarioId existente, ComercioId=2, EstadoId=2 Activo)
+   - Crea CuentaCorriente para Comercio B
+5. Juan puede operar inmediatamente en Comercio B
+6. Próximo login de Juan: verá ambos comercios en la lista
+
+FLUJO 3: Login con múltiples comercios
+---------------------------------------
+1. Juan hace login con juan@example.com
+2. Sistema:
+   - Busca usuario
+   - Obtiene vinculaciones: Cliente(Comercio A, Activo), Cliente(Comercio B, Activo)
+   - Genera token con claim "ComercioIds: 1,2"
+3. Retorna LoginResponse:
+   {
+     "token": "...",
+     "comercios": [
+       { "id": 1, "nombre": "Ferretería López" },
+       { "id": 2, "nombre": "Farmacia Pérez" }
+     ]
+   }
+4. Frontend muestra selector de comercio
+5. Juan selecciona y opera en el contexto elegido
+
+FLUJO 4: Autogestión con usuario existente
+-------------------------------------------
+1. Juan (ya cliente de Comercio A) quiere registrarse en Comercio C
+2. POST /api/auth/register/cliente
+   {
+     "email": "juan@example.com",
+     "password": "suPassword",
+     "comercioId": 3,
+     ...
+   }
+3. Sistema:
+   - Busca usuario por email → ENCUENTRA a Juan
+   - Valida contraseña (debe ser la misma)
+   - Verifica que no esté ya en Comercio C
+   - Crea vinculación Cliente (EstadoId=1 Pendiente)
+4. Retorna: "Pendiente de aprobación por el comercio"
+5. Admin de Comercio C aprueba
+6. Juan puede acceder a Comercio C
+
+================================================================================
+CAMBIOS EN LA BASE DE DATOS (Para migración)
+================================================================================
+
+MODIFICACIONES EN TABLAS:
+--------------------------
+
+1. Tabla Usuarios:
+   - ComercioId: Cambiar a NULLABLE (de INT NOT NULL a INT NULL)
+   - Razón: Clientes no tienen ComercioId (se relacionan vía Cliente)
+
+2. Tabla Clientes:
+   - UsuarioId: Cambiar a NOT NULL (de INT NULL a INT NOT NULL)
+   - Nuevas columnas:
+     * Alias NVARCHAR(100) NULL
+     * NotasComercio NVARCHAR(500) NULL
+
+ÍNDICES:
+--------
+
+1. NUEVO: IX_Clientes_UsuarioId_ComercioId (UNIQUE)
+   - Garantiza: Un usuario solo puede ser cliente una vez por comercio
+   - CREATE UNIQUE INDEX IX_Clientes_UsuarioId_ComercioId ON Clientes (UsuarioId, ComercioId)
+
+2. MANTIENE: IX_Clientes_ComercioId_Email (UNIQUE)
+   - Por compatibilidad con lógica existente
+
+================================================================================
+VALIDACIONES IMPLEMENTADAS
+================================================================================
+
+1. CreateClienteAsync (ClienteService):
+   ✓ Si usuario existe: verifica que no esté ya vinculado al comercio
+   ✓ Si usuario NO existe: valida que DNI esté presente
+   ✓ Permite reutilizar usuario existente
+
+2. VincularUsuarioAComercioAsync (ClienteService):
+   ✓ Valida que usuario exista
+   ✓ Valida que comercio exista
+   ✓ Valida que no esté ya vinculado
+
+3. RegisterClienteAsync (AuthService):
+   ✓ Si usuario existe: valida contraseña
+   ✓ Verifica que no esté ya vinculado al comercio
+   ✓ Permite mismo usuario en múltiples comercios
+
+4. LoginAsync (AuthService):
+   ✓ Obtiene todas las vinculaciones activas del usuario
+   ✓ Valida que tenga al menos un comercio activo
+   ✓ Retorna lista de comercios disponibles
+
+================================================================================
+DECISIONES DE DISEÑO IMPORTANTES
+================================================================================
+
+1. MANTENER datos personales en Cliente (por ahora)
+   - Nombre, Apellido, Email, Teléfono, DNI, Dirección
+   - Razón: Evitar romper lógica existente
+   - Futura mejora: Mover a Usuario para evitar duplicación
+
+2. Usuario.ComercioId NULLABLE
+   - NULL para Rol="Cliente"
+   - NOT NULL para Rol="Admin" o "UsuarioComercio"
+   - Permite diferenciar tipos de usuario
+
+3. Cliente como tabla intermedia
+   - No crear nueva tabla "ClienteComercio"
+   - Cliente YA cumple ese rol perfectamente
+   - Simplifica el modelo
+
+4. Índice único {UsuarioId, ComercioId}
+   - Garantiza integridad de datos
+   - Evita vinculaciones duplicadas
+   - Base de datos asegura la restricción
+
+5. Alias y NotasComercio en Cliente
+   - Datos específicos de cada vinculación
+   - Comercio puede personalizar cómo ve al cliente
+   - No afecta al usuario en otros comercios
+
+================================================================================
+ENDPOINTS NUEVOS
+================================================================================
+
+GET /api/clientes/mis-comercios
+POST /api/clientes/vincular
+
+================================================================================
+PRÓXIMOS PASOS (En otra PC con BD)
+================================================================================
+
+1. Hacer pull del repositorio
+
+2. Crear y aplicar migración:
+   cd SaasACC.Infrastructure
+   dotnet ef migrations add RefactorClienteMultiComercio --startup-project ../SaasACCAPI.api
+   dotnet ef database update --startup-project ../SaasACCAPI.api
+
+3. Verificar cambios en BD:
+   - Usuario.ComercioId permite NULL
+   - Cliente.UsuarioId es NOT NULL
+   - Nuevas columnas: Alias, NotasComercio
+   - Índice único: IX_Clientes_UsuarioId_ComercioId
+
+4. Actualizar frontend (si existe):
+   - Login: Mostrar selector de comercios si Comercios.Count > 1
+   - Agregar opción "Vincularme a otro comercio"
+   - Usar claim "ComercioIds" del token
+
+================================================================================
+TECNOLOGÍAS UTILIZADAS
+================================================================================
+
+- .NET 8
+- Entity Framework Core (Code First con migraciones)
+- SQL Server LocalDB
+- JWT Authentication
+- ASP.NET Core Web API
+
+================================================================================
+NOTAS IMPORTANTES
+================================================================================
+
+1. NO se ejecutó migración en esta máquina (no tiene BD)
+2. Migración lista para ejecutar en otra PC
+3. Código compatible con modelo anterior ANTES de migración
+4. Después de migración, nuevos flujos quedan disponibles
+5. Plan detallado en: PLAN_REFACTOR_CLIENTE_MULTICOMERCIO.md
+
+================================================================================
+TESTING RECOMENDADO
+================================================================================
+
+Después de aplicar migración, testear:
+
+1. ✓ Cliente nuevo se registra por autogestión
+2. ✓ Cliente existente se vincula a nuevo comercio (autogestión)
+3. ✓ Comercio agrega cliente que ya existe en otro comercio
+4. ✓ Login con múltiples comercios muestra lista
+5. ✓ Operaciones en cada comercio son independientes
+6. ✓ Cuentas corrientes separadas por comercio
+7. ✓ Estados de aprobación independientes por comercio
+
+================================================================================
+
+================================================================================
+IMPLEMENTACIÓN ANTERIOR: Sistema de Registro con Dos Botones Separados
 ================================================================================
 
 DESCRIPCIÓN:
