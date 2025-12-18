@@ -229,7 +229,7 @@ public class ClienteService : IClienteService
             EstadoId = cliente.EstadoId,
             EstadoNombre = cliente.Estado?.Nombre ?? string.Empty,
             OrigenRegistro = cliente.OrigenRegistro,
-            TieneUsuario = cliente.UsuarioId.HasValue,
+            TieneUsuario = cliente.UsuarioId > 0,
             FechaAprobacion = cliente.FechaAprobacion,
             CuentaCorriente = cliente.CuentaCorriente != null ? new CuentaCorrienteDto
             {

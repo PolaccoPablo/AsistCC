@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using SaasACC.Application.Interfaces;
 using SaasACC.Model.Entities;
@@ -6,7 +7,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Configuration;
 
 namespace SaasACC.Application.Services;
 
@@ -16,7 +16,7 @@ public interface IAuthService
     Task<RegisterResponse> RegisterComercioAsync(RegisterComercioRequest request);
     Task<RegisterResponse> RegisterClienteAsync(RegisterClienteRequest request);
     Task<ChangePasswordResponse> ChangePasswordAsync(int usuarioId, ChangePasswordRequest request);
-    string GenerateJwtTokenAsync(Usuario usuario, int? clienteId = null);
+    string GenerateJwtTokenAsync(Usuario usuario, List<ComercioInfo>? comercios = null);
 }
 
 public class AuthService : IAuthService
