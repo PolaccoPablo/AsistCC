@@ -13,5 +13,10 @@ public interface IClienteRepository
     Task<bool> ExistsAsync(int id);
     Task<bool> EmailExistsAsync(string email, int comercioId, int? excludeId = null);
     Task<CuentaCorriente> CrearCuentaCorrienteAsync(int clienteId);
+
+    // Nuevos métodos para modelo multicomercio
+    Task<IEnumerable<Cliente>> GetByUsuarioIdAsync(int usuarioId);
+    Task<bool> ExisteVinculoAsync(int usuarioId, int comercioId);
+    Task<Cliente?> GetVinculoAsync(int usuarioId, int comercioId);
 }
 
