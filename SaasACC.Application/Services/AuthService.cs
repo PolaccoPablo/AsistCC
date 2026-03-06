@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using SaasACC.Application.Interfaces;
-using SaasACC.Model.Entities;
+using SaasACC.Domain.Entities;
 using SaasACC.Model.Servicios.Login;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;

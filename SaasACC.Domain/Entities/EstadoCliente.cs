@@ -1,5 +1,4 @@
-namespace SaasACC.Model.Entities;
-
+namespace SaasACC.Domain.Entities;
 public class EstadoCliente
 {
     public int Id { get; set; }

@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SaasACC.Application.Interfaces;
-using SaasACC.Infrastructure;
-using SaasACC.Model.Entities;
+using SaasACC.Domain.Entities;
 
 namespace SaasACC.Infrastructure.Repositories;
 

@@ -1,5 +1,4 @@
-namespace SaasACC.Model.Entities;
-
+namespace SaasACC.Domain.Entities;
 public enum TipoMovimiento
 {
     Debe = 1,  // Cliente debe dinero (compra, cargo)

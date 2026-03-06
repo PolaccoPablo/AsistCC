@@ -1,14 +1,14 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using System.Net;
-using SaasACC.Infrastructure;
+using Microsoft.OpenApi.Models;
 using SaasACC.Application.Interfaces;
 using SaasACC.Application.Services;
+using SaasACC.Infrastructure;
 using SaasACC.Infrastructure.Repositories;
-using SaasACCAPI.api.Data;
+using System.Net;
+using System.Text;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,7 +58,7 @@ builder.Services.AddSwaggerGen(c =>
         Title = "SaaS Cuentas Corrientes API",
         Version = "v1"
     });
-    
+
     // Configurar Swagger para JWT
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -68,7 +68,7 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-    
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -103,12 +103,10 @@ var app = builder.Build();
 // Configurar para desarrollo - permitir certificados SSL no válidos
 if (app.Environment.IsDevelopment())
 {
-    ServicePointManager.ServerCertificateValidationCallback = 
+    ServicePointManager.ServerCertificateValidationCallback =
         (sender, certificate, chain, sslPolicyErrors) => true;
 }
 
-// Inicializar base de datos con datos de prueba
-await DbInitializer.InitializeAsync(app.Services);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
