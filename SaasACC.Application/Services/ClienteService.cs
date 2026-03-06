@@ -1,6 +1,6 @@
 using SaasACC.Application.Interfaces;
+using SaasACC.Domain.Entities;
 using SaasACC.Model.DTOs;
-using SaasACC.Model.Entities;
 using System.Security.Cryptography;
 using System.Text;
 

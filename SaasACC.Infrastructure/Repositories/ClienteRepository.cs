@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SaasACC.Application.Interfaces;
-using SaasACC.Infrastructure;
-using SaasACC.Model.Entities;
+using SaasACC.Domain.Entities;
 
 namespace SaasACC.Infrastructure.Repositories;
 
@@ -68,10 +67,10 @@ public class ClienteRepository : IClienteRepository
     public async Task<Cliente> UpdateAsync(Cliente cliente)
     {
         // NombreCompleto se calcula automáticamente desde Nombre y Apellido
-        
+
         _context.Clientes.Update(cliente);
         await _context.SaveChangesAsync();
-        
+
         return cliente;
     }
 
@@ -83,7 +82,7 @@ public class ClienteRepository : IClienteRepository
         // Soft delete
         cliente.Activo = false;
         cliente.FechaModificacion = DateTime.UtcNow;
-        
+
         // También soft delete de la cuenta corriente
         var cuentaCorriente = await _context.CuentasCorrientes
             .FirstOrDefaultAsync(cc => cc.ClienteId == id);
@@ -92,7 +91,7 @@ public class ClienteRepository : IClienteRepository
             cuentaCorriente.Activo = false;
             cuentaCorriente.FechaModificacion = DateTime.UtcNow;
         }
-        
+
         await _context.SaveChangesAsync();
         return true;
     }

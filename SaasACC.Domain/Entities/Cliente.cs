@@ -1,4 +1,4 @@
-namespace SaasACC.Model.Entities;
+namespace SaasACC.Domain.Entities;
 
 public class Cliente : BaseEntity
 {
