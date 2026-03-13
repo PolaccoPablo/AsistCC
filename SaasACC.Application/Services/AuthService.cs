@@ -1,12 +1,11 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using SaasACC.Application.Interfaces;
 using SaasACC.Domain.Entities;
 using SaasACC.Model.Servicios.Login;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace SaasACC.Application.Services;
 
@@ -56,9 +55,7 @@ public class AuthService : IAuthService
             }
 
             // Validar contraseña
-            var isValidPassword = await _usuarioRepository.ValidatePasswordAsync(request.Email, request.Password);
-
-            if (!isValidPassword)
+            if (!PasswordHasher.Verify(request.Password, usuario.PasswordHash))
             {
                 return new LoginResponse
                 {
@@ -238,7 +235,7 @@ public class AuthService : IAuthService
             {
                 Nombre = request.NombreAdmin,
                 Email = request.EmailAdmin,
-                PasswordHash = HashPassword(request.Password),
+                PasswordHash = PasswordHasher.Hash(request.Password),
                 Rol = "Admin",
                 ComercioId = comercio.Id
             };
@@ -298,7 +295,7 @@ public class AuthService : IAuthService
             if (usuarioExistente != null)
             {
                 // Usuario existe: verificar contraseña
-                if (!await _usuarioRepository.ValidatePasswordAsync(request.Email, request.Password))
+                if (!PasswordHasher.Verify(request.Password, usuarioExistente.PasswordHash))
                 {
                     return new RegisterResponse
                     {
@@ -327,7 +324,7 @@ public class AuthService : IAuthService
                     Nombre = request.Nombre,
                     Apellido = request.Apellido,
                     Email = request.Email,
-                    PasswordHash = HashPassword(request.Password),
+                    PasswordHash = PasswordHasher.Hash(request.Password),
                     Rol = "Cliente",
                     ComercioId = null, // NULL para clientes (se relacionan vía Cliente)
                     FechaCreacion = DateTime.UtcNow,
@@ -412,8 +409,7 @@ public class AuthService : IAuthService
             }
 
             // Validar contraseña actual
-            var currentPasswordHash = HashPassword(request.CurrentPassword);
-            if (usuario.PasswordHash != currentPasswordHash)
+            if (!PasswordHasher.Verify(request.CurrentPassword, usuario.PasswordHash))
             {
                 return new ChangePasswordResponse
                 {
@@ -423,7 +419,7 @@ public class AuthService : IAuthService
             }
 
             // Actualizar contraseña
-            usuario.PasswordHash = HashPassword(request.NewPassword);
+            usuario.PasswordHash = PasswordHasher.Hash(request.NewPassword);
             usuario.FechaModificacion = DateTime.UtcNow;
 
             // Actualizar último acceso (importante para marcar que ya cambió la contraseña)
@@ -447,10 +443,4 @@ public class AuthService : IAuthService
         }
     }
 
-    private static string HashPassword(string password)
-    {
-        using var sha256 = SHA256.Create();
-        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-        return Convert.ToBase64String(hashedBytes);
-    }
 }
