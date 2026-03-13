@@ -1,8 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SaasACC.Application.Interfaces;
 using SaasACC.Domain.Entities;
-using System.Security.Cryptography;
-using System.Text;
+using SaasACC.Application.Services;
 
 namespace SaasACC.Infrastructure.Repositories;
 
@@ -55,7 +54,7 @@ public class UsuarioRepository : IUsuarioRepository
         var usuario = await GetByEmailAsync(email);
         if (usuario == null) return false;
 
-        return VerifyPassword(password, usuario.PasswordHash);
+        return PasswordHasher.Verify(password, usuario.PasswordHash);
     }
 
     public async Task UpdateLastAccessAsync(int userId)
@@ -68,17 +67,4 @@ public class UsuarioRepository : IUsuarioRepository
         }
     }
 
-    // Métodos auxiliares para hash de contraseñas
-    public static string HashPassword(string password)
-    {
-        using var sha256 = SHA256.Create();
-        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-        return Convert.ToBase64String(hashedBytes);
-    }
-
-    private static bool VerifyPassword(string password, string hash)
-    {
-        var hashedPassword = HashPassword(password);
-        return hashedPassword == hash;
-    }
 }

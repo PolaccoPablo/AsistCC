@@ -1,8 +1,6 @@
 using SaasACC.Application.Interfaces;
 using SaasACC.Domain.Entities;
 using SaasACC.Model.DTOs;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace SaasACC.Application.Services;
 
@@ -87,7 +85,7 @@ public class ClienteService : IClienteService
                 Nombre = request.Nombre,
                 Apellido = request.Apellido,
                 Email = request.Email,
-                PasswordHash = HashPassword(request.DNI),
+                PasswordHash = PasswordHasher.Hash(request.DNI),
                 Rol = "Cliente",
                 ComercioId = null, // NULL para clientes (se relacionan vía Cliente)
                 FechaCreacion = DateTime.UtcNow,
@@ -240,13 +238,6 @@ public class ClienteService : IClienteService
                 FechaUltimaActualizacion = cliente.CuentaCorriente.FechaModificacion
             } : null
         };
-    }
-
-    private static string HashPassword(string password)
-    {
-        using var sha256 = SHA256.Create();
-        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-        return Convert.ToBase64String(hashedBytes);
     }
 
     // Nuevos métodos para modelo multicomercio
