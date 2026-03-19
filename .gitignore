@@ -85,10 +85,7 @@ Desktop.ini
 *.p12
 
 # Archivos de migración temporal
-**/Migrations/
+
 
 # Archivos de Azure
 PublishProfiles/
-
-#claude
-.claude/
