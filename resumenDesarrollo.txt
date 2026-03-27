@@ -1649,5 +1649,67 @@ FLUJO CRÍTICO:
 4. Login aprobado → SUCCESS: Token generado con ClienteId
 
 ================================================================================
+IMPLEMENTACIÓN: Expiración de Sesión con Logout Automático
+================================================================================
+Fecha: 2026-03-26
+Branch: 29-refresh-de-tocken-y-logout
+
+DESCRIPCIÓN:
+Se implementó el manejo correcto de la expiración de sesión JWT en la aplicación.
+Cuando el token expira, el usuario es deslogueado automáticamente. No se realiza
+refresh de token — la expiración siempre resulta en logout.
+
+Se corrigió además un bug crítico donde el token expiraba en 24 segundos
+en lugar de 24 horas por usar AddSeconds en lugar de AddHours.
+
+ARCHIVOS CREADOS:
+1. SaasACC.BlazorWasm/Services/AuthorizationMessageHandler.cs
+   - DelegatingHandler que intercepta todas las respuestas HTTP del cliente
+   - Si detecta un 401 Unauthorized, llama a IAuthService.Logout() automáticamente
+   - Usa IServiceProvider para resolver IAuthService de forma diferida y evitar
+     dependencia circular (HttpClient → Handler → IAuthService → HttpClient)
+
+ARCHIVOS MODIFICADOS:
+1. SaasACC.Application/Services/AuthService.cs
+   - Bug fix: cambiado AddSeconds(jwtExpiryHours) → AddHours(jwtExpiryHours)
+   - El token ahora expira correctamente en 24 horas según appsettings.json
+
+2. SaasACC.BlazorWasm/Services/CustomAuthStateProvider.cs
+   - Agregado método IsTokenExpired(): decodifica el payload Base64 del JWT,
+     extrae el claim "exp" (Unix timestamp) y lo compara con DateTime.UtcNow
+   - GetAuthenticationStateAsync() ahora verifica expiración antes de autenticar:
+     si el token está vencido, limpia localStorage y devuelve estado anónimo
+
+3. SaasACC.BlazorWasm/Program.cs
+   - Reemplazado registro manual de HttpClient (new HttpClient{...}) por
+     AddHttpClient("API") con encadenamiento de AuthorizationMessageHandler
+   - El HttpClient resuelto desde IHttpClientFactory mantiene compatibilidad
+     con el resto de los servicios sin necesidad de cambios adicionales
+
+FLUJO IMPLEMENTADO:
+1. App carga / recarga:
+   CustomAuthStateProvider.GetAuthenticationStateAsync()
+   → ¿Token en localStorage? NO → usuario anónimo
+   → ¿Token expirado? SÍ → limpia localStorage → usuario anónimo
+   → Token válido → autenticar normalmente
+
+2. Request HTTP en runtime:
+   AuthorizationMessageHandler.SendAsync()
+   → request pasa al servidor
+   → ¿Respuesta 401? SÍ → authService.Logout() → redirige al login
+   → Otra respuesta → devuelve al componente normalmente
+
+DECISIONES DE DISEÑO:
+- No se implementó refresh de token: la expiración siempre resulta en logout.
+  Razón: simplicidad y seguridad (no hay tokens de refresh que gestionar).
+- IServiceProvider en el handler en lugar de inyección directa de IAuthService:
+  evita dependencia circular en el contenedor de DI de Blazor WASM.
+- IsTokenExpired() es puramente local: no hace requests al servidor, decodifica
+  directamente el payload Base64 del JWT (reutiliza ParseBase64WithoutPadding).
+
+BUGS CORREGIDOS:
+- Token expiraba en 24 segundos en lugar de 24 horas (AddSeconds → AddHours)
+
+================================================================================
 FIN DEL RESUMEN
 ================================================================================

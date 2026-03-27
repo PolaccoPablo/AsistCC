@@ -23,11 +23,38 @@ namespace SaacACC.BlazorWasm.Services
             if (string.IsNullOrEmpty(token))
                 return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
 
+            if (IsTokenExpired(token))
+            {
+                await _localStorage.RemoveItemAsync("authToken");
+                await _localStorage.RemoveItemAsync("userRole");
+                await _localStorage.RemoveItemAsync("comercioId");
+                _httpClient.DefaultRequestHeaders.Authorization = null;
+                return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+            }
+
             _httpClient.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
             return new AuthenticationState(new ClaimsPrincipal(
                 new ClaimsIdentity(ParseClaimsFromJwt(token), "jwt")));
+        }
+
+        private bool IsTokenExpired(string token)
+        {
+            try
+            {
+                var payload = token.Split('.')[1];
+                var jsonBytes = ParseBase64WithoutPadding(payload);
+                var claims = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes);
+
+                if (claims != null && claims.TryGetValue("exp", out var expValue))
+                {
+                    var exp = long.Parse(expValue.ToString()!);
+                    return DateTime.UtcNow >= DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+                }
+            }
+            catch { }
+            return false;
         }
 
         public void NotifyUserAuthentication(string token)

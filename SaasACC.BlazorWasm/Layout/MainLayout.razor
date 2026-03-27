@@ -4,6 +4,7 @@
 @inherits LayoutComponentBase
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
+@implements IDisposable
 
 <MudLayout>
     <MudAppBar Elevation="1">
@@ -36,6 +37,24 @@
 
 @code {
     bool _drawerOpen = true;
+    private Timer? _sessionTimer;
+
+    protected override void OnInitialized()
+    {
+        // Opción A: chequea al navegar entre páginas
+        Navigation.LocationChanged += OnLocationChanged;
+
+        // Opción C: chequea cada 60 segundos
+        _sessionTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(async () => await AuthService.CheckSessionAsync());
+        }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await AuthService.CheckSessionAsync();
+    }
 
     void DrawerToggle()
     {
@@ -45,6 +64,11 @@
     async Task Logout()
     {
         await AuthService.Logout();
-        Navigation.NavigateTo("/login");
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        _sessionTimer?.Dispose();
     }
 }

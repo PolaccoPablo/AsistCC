@@ -48,6 +48,12 @@ SaaSCuentasCorrientes/
 
 ### 🔐 Autenticación y Registro
 
+#### Expiración de Sesión con Logout Automático
+- Logout automático cuando el token JWT expira (sin refresh de token)
+- Validación local del claim `exp` al cargar la app — sin requests al servidor
+- `AuthorizationMessageHandler`: intercepta respuestas `401` en runtime y ejecuta logout
+- Token con expiración correcta de 24 horas según configuración
+
 #### Sistema de Login con Multicomercio
 - Login con email y password (único por usuario)
 - **Un usuario puede ser cliente de múltiples comercios**

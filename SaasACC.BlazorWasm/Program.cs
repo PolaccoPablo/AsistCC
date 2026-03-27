@@ -17,10 +17,16 @@ builder.Services.AddMudServices();
 builder.Services.AddBlazoredLocalStorage();
 
 // Configurar HttpClient para conectar con la API
-builder.Services.AddScoped(sp => new HttpClient
+builder.Services.AddScoped<AuthorizationMessageHandler>();
+
+builder.Services.AddHttpClient("API", client =>
 {
-    BaseAddress = new Uri("https://localhost:7201/") // Puerto de tu API
-});
+    client.BaseAddress = new Uri("https://localhost:7201/");
+})
+.AddHttpMessageHandler<AuthorizationMessageHandler>();
+
+builder.Services.AddScoped(sp =>
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("API"));
 
 // Agregar servicios de autenticación
 builder.Services.AddScoped<IAuthService, AuthService>();

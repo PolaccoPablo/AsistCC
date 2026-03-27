@@ -1,5 +1,7 @@
 ﻿using Blazored.LocalStorage;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using MudBlazor;
 using SaasACC.Model.Servicios.Login;
 using System.Net.Http.Headers;
 using System.Text;
@@ -12,17 +14,23 @@ namespace SaacACC.BlazorWasm.Services
         private readonly HttpClient _httpClient;
         private readonly ILocalStorageService _localStorage;
         private readonly AuthenticationStateProvider _authStateProvider;
+        private readonly NavigationManager _navigation;
+        private readonly ISnackbar _snackbar;
         private const string TOKEN_KEY = "authToken";
         private const string ROLE_KEY = "userRole";
         private const string COMERCIO_KEY = "comercioId";
 
         public AuthService(HttpClient httpClient,
                           ILocalStorageService localStorage,
-                          AuthenticationStateProvider authStateProvider)
+                          AuthenticationStateProvider authStateProvider,
+                          NavigationManager navigation,
+                          ISnackbar snackbar)
         {
             _httpClient = httpClient;
             _localStorage = localStorage;
             _authStateProvider = authStateProvider;
+            _navigation = navigation;
+            _snackbar = snackbar;
         }
 
         public async Task<LoginResponse> Login(LoginRequest loginRequest)
@@ -135,7 +143,17 @@ namespace SaacACC.BlazorWasm.Services
             }
         }
 
-        public async Task Logout()
+        public async Task CheckSessionAsync()
+        {
+            var token = await _localStorage.GetItemAsync<string>(TOKEN_KEY);
+            if (string.IsNullOrEmpty(token)) return;
+
+            var state = await _authStateProvider.GetAuthenticationStateAsync();
+            if (!state.User.Identity!.IsAuthenticated)
+                await Logout(sessionExpired: true);
+        }
+
+        public async Task Logout(bool sessionExpired = false)
         {
             await _localStorage.RemoveItemAsync(TOKEN_KEY);
             await _localStorage.RemoveItemAsync(ROLE_KEY);
@@ -143,6 +161,11 @@ namespace SaacACC.BlazorWasm.Services
 
             _httpClient.DefaultRequestHeaders.Authorization = null;
             ((CustomAuthStateProvider)_authStateProvider).NotifyUserLogout();
+
+            if (sessionExpired)
+                _snackbar.Add("Tu sesión expiró. Iniciá sesión nuevamente.", Severity.Warning);
+
+            _navigation.NavigateTo("/login");
         }
 
         public async Task<bool> IsUserAuthenticated()
