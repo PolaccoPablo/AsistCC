@@ -1,11 +1,11 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using SaasACC.Application.Interfaces;
 using SaasACC.Domain.Entities;
 using SaasACC.Model.Servicios.Login;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 
 namespace SaasACC.Application.Services;
 
@@ -183,7 +183,7 @@ public class AuthService : IAuthService
             issuer: jwtIssuer,
             audience: jwtAudience,
             claims: claimsList,
-            expires: DateTime.UtcNow.AddHours(jwtExpiryHours),
+            expires: DateTime.UtcNow.AddMinutes(jwtExpiryHours),
             signingCredentials: credentials
         );
 
