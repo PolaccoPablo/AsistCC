@@ -19,9 +19,6 @@ public static class DbSeeder
         using var scope = serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        if (await db.Comercios.AnyAsync())
-            return;
-
         var now = DateTime.UtcNow;
 
         // ─── 1. COMERCIOS ─────────────────────────────────────────────────────────
