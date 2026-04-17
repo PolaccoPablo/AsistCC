@@ -183,7 +183,7 @@ public class AuthService : IAuthService
             issuer: jwtIssuer,
             audience: jwtAudience,
             claims: claimsList,
-            expires: DateTime.UtcNow.AddMinutes(jwtExpiryHours),
+            expires: DateTime.UtcNow.AddHours(jwtExpiryHours),
             signingCredentials: credentials
         );
 
