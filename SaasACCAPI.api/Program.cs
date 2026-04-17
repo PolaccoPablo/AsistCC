@@ -6,6 +6,7 @@ using SaasACC.Application.Interfaces;
 using SaasACC.Application.Services;
 using SaasACC.Infrastructure;
 using SaasACC.Infrastructure.Repositories;
+using SaasACC.Infrastructure.Seeds;
 using System.Net;
 using System.Text;
 
@@ -105,6 +106,15 @@ if (app.Environment.IsDevelopment())
 {
     ServicePointManager.ServerCertificateValidationCallback =
         (sender, certificate, chain, sslPolicyErrors) => true;
+}
+
+// Aplicar migraciones pendientes y cargar datos de prueba
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.MigrateAsync();
+    await DbSeeder.SeedAsync(app.Services);
 }
 
 

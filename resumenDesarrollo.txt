@@ -1711,5 +1711,64 @@ BUGS CORREGIDOS:
 - Token expiraba en 24 segundos en lugar de 24 horas (AddSeconds → AddHours)
 
 ================================================================================
+IMPLEMENTACIÓN: Clase Seed para Datos de Prueba
+================================================================================
+Fecha: 2026-04-16
+Branch: 25-cargar-la-db-con-datos-de-prueba
+
+DESCRIPCIÓN:
+Se implementó una clase estática DbSeeder que carga datos de prueba realistas
+en la base de datos al iniciar la aplicación en modo desarrollo. La clase es
+idempotente: verifica si ya existen comercios antes de ejecutar, por lo que
+puede llamarse en cada startup sin duplicar datos.
+
+ARCHIVOS CREADOS:
+1. SaasACC.Infrastructure/Seeds/DbSeeder.cs
+   - Clase estática con método SeedAsync(IServiceProvider)
+   - Verifica si ya hay datos antes de ejecutar (guard: Comercios.AnyAsync)
+   - Crea en orden: Comercios → Usuarios Staff → Usuarios Clientes →
+     Clientes → CuentasCorrientes → Movimientos
+   - Helpers privados: Cu() para usuarios cliente, CA() para clientes activos,
+     Mv() para movimientos
+
+ARCHIVOS MODIFICADOS:
+1. SaasACCAPI.api/Program.cs
+   - Agregado using SaasACC.Infrastructure.Seeds
+   - Agregado llamado await DbSeeder.SeedAsync(app.Services) en bloque IsDevelopment
+
+DATOS GENERADOS:
+- 3 Comercios:
+    * Ferretería El Maestro (Córdoba) – admin@elmaestro.com.ar
+    * Panadería La Espiga Dorada (Rosario) – admin@laespigadorada.com.ar
+    * Librería y Papelería El Saber (Mendoza) – admin@elsaber.com.ar
+- 5 Usuarios staff (3 Admin + 2 UsuarioComercio)
+- 24 Usuarios clientes (Rol="Cliente", ComercioId=null)
+- 24 Clientes distribuidos:
+    * Ferretería: 8 Activos + 1 Pendiente + 1 Inactivo
+    * Panadería:  6 Activos + 1 Pendiente + 1 Inactivo
+    * Librería:   5 Activos + 1 Pendiente
+- 21 CuentasCorrientes (solo clientes Activo e Inactivo)
+    * 2 cuentas bloqueadas (clientes inactivos con deuda vencida)
+    * Límites de crédito entre $3.000 y $35.000
+- ~100 Movimientos con fechas históricas realistas:
+    * Ferretería: materiales construcción, plomería, pintura, eléctrica
+    * Panadería: pedidos periódicos, tortas, catering
+    * Librería: útiles escolares, libros universitarios, insumos oficina
+    * Mix de pagados (con FechaPago) y pendientes (deuda corriente)
+    * Algunos con ObservacionesPago para deudas en gestión
+
+CREDENCIALES DE ACCESO:
+- Contraseña para TODOS los usuarios: Admin123!
+- Emails de admin: admin@elmaestro.com.ar / admin@laespigadorada.com.ar / admin@elsaber.com.ar
+
+DECISIONES DE DISEÑO:
+- Se usó clase estática con IServiceProvider en lugar de IHostedService o
+  migration seed, para tener control explícito y no bloquear el startup
+- Los datos son idempotentes: si se ejecuta dos veces no duplica registros
+- Solo corre en IsDevelopment() para no afectar producción
+- FechaCreacion se establece manualmente con offsets realistas (hasta -14 meses)
+  para simular historial de uso
+
+================================================================================
 FIN DEL RESUMEN
 ================================================================================
